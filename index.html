@@ -705,8 +705,10 @@
             top: 0;
             font-family: var(--font-body);
         }
-        .data-table th[onclick] { cursor: pointer; transition: color 0.15s ease; }
+        .data-table th[onclick] { cursor: pointer; transition: color 0.15s ease; position: relative; }
         .data-table th[onclick]:hover { color: var(--accent); }
+        .data-table th[data-sort="asc"]::after { content: ' ↑'; font-family: var(--font-mono); color: var(--accent); letter-spacing: 0; }
+        .data-table th[data-sort="desc"]::after { content: ' ↓'; font-family: var(--font-mono); color: var(--accent); letter-spacing: 0; }
         .data-table th:first-child,
         .data-table td:first-child { padding-left: 4px; }
         .data-table th.num,
@@ -989,7 +991,9 @@
                         <select id="sortBy">
                             <option value="devices">Devices · High to Low</option>
                             <option value="school">School · A–Z</option>
+                            <option value="students">Active Students · High to Low</option>
                             <option value="ratio">Ratio · High to Low</option>
+                            <option value="status">Status · Most Concern</option>
                             <option value="commonModel">Model · A–Z</option>
                             <option value="recentSync">Recent Sync · Newest</option>
                             <option value="commonManufacturingYear">Mfg. Year · Newest</option>
@@ -1053,12 +1057,12 @@
                     <table class="data-table" id="dataTable">
                         <thead>
                             <tr>
-                                <th onclick="sortTable('school')">School</th>
-                                <th class="num" onclick="sortTable('devices')">Chromebooks</th>
-                                <th class="num" onclick="sortTable('students')">Active Students</th>
-                                <th class="num" onclick="sortTable('ratio')">Ratio</th>
-                                <th onclick="sortTable('commonModel')">Most Common Model</th>
-                                <th>Status</th>
+                                <th data-field="school" onclick="sortTable('school')">School</th>
+                                <th class="num" data-field="devices" onclick="sortTable('devices')">Chromebooks</th>
+                                <th class="num" data-field="students" onclick="sortTable('students')">Active Students</th>
+                                <th class="num" data-field="ratio" onclick="sortTable('ratio')">Ratio</th>
+                                <th data-field="commonModel" onclick="sortTable('commonModel')">Most Common Model</th>
+                                <th data-field="status" onclick="sortTable('status')">Status</th>
                             </tr>
                         </thead>
                         <tbody id="dataTableBody">
@@ -1076,10 +1080,10 @@
                     <table class="data-table" id="deviceTable">
                         <thead>
                             <tr>
-                                <th onclick="sortDeviceTable('school')">School</th>
-                                <th onclick="sortDeviceTable('model')">Model</th>
-                                <th class="num" onclick="sortDeviceTable('manufacturingYear')">Mfg. Year</th>
-                                <th onclick="sortDeviceTable('lastPolicySync')">Last Policy Sync</th>
+                                <th data-field="school" onclick="sortDeviceTable('school')">School</th>
+                                <th data-field="model" onclick="sortDeviceTable('model')">Model</th>
+                                <th class="num" data-field="manufacturingYear" onclick="sortDeviceTable('manufacturingYear')">Mfg. Year</th>
+                                <th data-field="lastPolicySync" onclick="sortDeviceTable('lastPolicySync')">Last Policy Sync</th>
                             </tr>
                         </thead>
                         <tbody id="deviceTableBody">
@@ -1255,7 +1259,11 @@
         document.getElementById('viewMode').addEventListener('change', debouncedUpdateCharts);
         document.getElementById('searchSchool').addEventListener('input', debouncedUpdateCharts);
         // Event listeners for checkbox filters will be added dynamically
-        document.getElementById('sortBy').addEventListener('change', debouncedUpdateCharts);
+        document.getElementById('sortBy').addEventListener('change', (e) => {
+            currentSortField = e.target.value;
+            currentSortOrder = defaultOrderFor(currentSortField);
+            debouncedUpdateCharts();
+        });
 
         // --- Settings panel wiring ----------------------------------------
         function populateSettingsForm() {
@@ -2381,6 +2389,7 @@
         function updateDataTable(data) {
             const tbody = document.getElementById('dataTableBody');
             tbody.innerHTML = '';
+            updateSortIndicators('dataTable', currentSortField, currentSortOrder);
 
             data.forEach(school => {
                 const row = tbody.insertRow();
@@ -2404,23 +2413,49 @@
             });
         }
         
+        // Device-table sort state (separate from the school-level state above).
+        let currentDeviceSortField = 'school';
+        let currentDeviceSortOrder = 'asc';
+        // Cache the last-used filter arguments so a header click can re-render
+        // without having to re-thread them through from updateCharts.
+        let _lastDeviceRenderArgs = null;
+
+        function compareDevices(a, b, field) {
+            switch (field) {
+                case 'school': return a.school.localeCompare(b.school);
+                case 'model':  return a.model.localeCompare(b.model);
+                case 'manufacturingYear': {
+                    const toNum = v => (!v || v === 'Unknown') ? -Infinity : parseInt(v, 10);
+                    return toNum(a.manufacturingYear) - toNum(b.manufacturingYear);
+                }
+                case 'lastPolicySync': {
+                    const toTs = v => {
+                        if (!v || v === 'Unknown') return -Infinity;
+                        const t = Date.parse(v);
+                        return isNaN(t) ? -Infinity : t;
+                    };
+                    return toTs(a.lastPolicySync) - toTs(b.lastPolicySync);
+                }
+                default: return a.school.localeCompare(b.school);
+            }
+        }
+
         function updateDeviceTable(filteredSchoolData, selectedModels, selectedYears, selectedOSVersions) {
+            _lastDeviceRenderArgs = [filteredSchoolData, selectedModels, selectedYears, selectedOSVersions];
             const tbody = document.getElementById('deviceTableBody');
             tbody.innerHTML = '';
-            
+            updateSortIndicators('deviceTable', currentDeviceSortField, currentDeviceSortOrder);
+
             // Filter device-level data based on current filters
             const filteredDevices = deviceLevelData.filter(device => {
-                // Check if device's school is in the filtered school data
                 const schoolIncluded = filteredSchoolData.some(school => school.school === device.school);
                 if (!schoolIncluded) return false;
-                
-                // Model filter
+
                 let matchesModel = true;
                 if (selectedModels.length > 0) {
                     matchesModel = selectedModels.includes(device.model);
                 }
-                
-                // Year filter
+
                 let matchesYear = true;
                 if (selectedYears.length > 0) {
                     if (selectedYears.includes('Unknown')) {
@@ -2429,8 +2464,7 @@
                         matchesYear = selectedYears.includes(device.manufacturingYear);
                     }
                 }
-                
-                // OS Version filter with grouping support
+
                 let matchesOSVersion = true;
                 if (selectedOSVersions.length > 0) {
                     if (selectedOSVersions.includes('Unknown') && device.osVersion === 'Unknown') {
@@ -2444,18 +2478,26 @@
                         });
                     }
                 }
-                
+
                 return matchesModel && matchesYear && matchesOSVersion;
             });
-            
-            // Sort devices by school, then model
+
+            // Primary sort by current field/direction; fall back to school then
+            // model so rows are deterministic when the primary values tie.
+            const primary = currentDeviceSortField;
+            const dir = currentDeviceSortOrder === 'asc' ? 1 : -1;
             filteredDevices.sort((a, b) => {
-                const schoolCompare = a.school.localeCompare(b.school);
-                if (schoolCompare !== 0) return schoolCompare;
-                return a.model.localeCompare(b.model);
+                const cmp = compareDevices(a, b, primary) * dir;
+                if (cmp !== 0) return cmp;
+                if (primary !== 'school') {
+                    const s = a.school.localeCompare(b.school);
+                    if (s !== 0) return s;
+                }
+                if (primary !== 'model') return a.model.localeCompare(b.model);
+                return 0;
             });
-            
-            // Add rows to table (limit to first 1000 for performance)
+
+            // Add rows (limit to first 1000 for performance)
             filteredDevices.slice(0, 1000).forEach(device => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
@@ -2466,7 +2508,6 @@
                 `;
             });
 
-            // Show count info if limited
             if (filteredDevices.length > 1000) {
                 const infoRow = tbody.insertRow();
                 infoRow.innerHTML = `
@@ -2483,12 +2524,22 @@
                 `;
             }
         }
-        
+
+        function deviceSortDefaultOrder(field) {
+            // School + Model are A→Z; year and date are newest-first.
+            return (field === 'school' || field === 'model') ? 'asc' : 'desc';
+        }
+
         function sortDeviceTable(field) {
-            // Simple implementation - could be enhanced with more sophisticated sorting
-            console.log('Sorting device table by:', field);
-            // This would trigger a re-render with different sorting
-            // For now, we'll keep the default sorting by school then model
+            if (currentDeviceSortField === field) {
+                currentDeviceSortOrder = currentDeviceSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentDeviceSortField = field;
+                currentDeviceSortOrder = deviceSortDefaultOrder(field);
+            }
+            if (_lastDeviceRenderArgs) {
+                updateDeviceTable(..._lastDeviceRenderArgs);
+            }
         }
 
         function getChartOptions(chartType, viewMode) {
@@ -3000,55 +3051,72 @@
             });
         }
         
-        function sortData(data, sortField) {
-            return data.sort((a, b) => {
-                switch(sortField) {
-                    case 'school':
-                        return a.school.localeCompare(b.school);
-                    case 'devices':
-                        return b.devices - a.devices; // High to low
-                    case 'students':
-                        return b.students - a.students; // High to low
-                    case 'ratio':
-                        return b.ratio - a.ratio; // High to low
-                    case 'commonModel':
-                        return a.commonModel.localeCompare(b.commonModel);
-                    case 'commonManufacturingYear':
-                        // Sort by year, newest first
-                        if (a.commonManufacturingYear === 'Unknown' && b.commonManufacturingYear === 'Unknown') return 0;
-                        if (a.commonManufacturingYear === 'Unknown') return 1;
-                        if (b.commonManufacturingYear === 'Unknown') return -1;
-                        return parseInt(b.commonManufacturingYear) - parseInt(a.commonManufacturingYear);
-                    case 'recentSync':
-                        // Sort by date, newest first
-                        if (a.recentSync === 'Unknown' && b.recentSync === 'Unknown') return 0;
-                        if (a.recentSync === 'Unknown') return 1;
-                        if (b.recentSync === 'Unknown') return -1;
-                        try {
-                            const dateA = new Date(a.recentSync);
-                            const dateB = new Date(b.recentSync);
-                            return dateB - dateA; // Newest first
-                        } catch (e) {
-                            return a.recentSync.localeCompare(b.recentSync);
-                        }
-                    default:
-                        return b.devices - a.devices;
+        // Natural direction for each sort field — used when the field is first
+        // selected (via dropdown or a fresh column click). Clicking the same
+        // column twice toggles from here.
+        function defaultOrderFor(field) {
+            return (field === 'school' || field === 'commonModel' || field === 'model') ? 'asc' : 'desc';
+        }
+
+        // Visually mark which column of which table is the active sort.
+        function updateSortIndicators(tableId, field, order) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            table.querySelectorAll('thead th').forEach(th => {
+                if (th.dataset.field === field) {
+                    th.dataset.sort = order;
+                } else {
+                    delete th.dataset.sort;
                 }
             });
         }
-        
+
+        function compareByField(a, b, field) {
+            switch (field) {
+                case 'school': return a.school.localeCompare(b.school);
+                case 'devices': return a.devices - b.devices;
+                case 'students': return a.students - b.students;
+                case 'ratio': return a.ratio - b.ratio;
+                case 'status': return a.ratio - b.ratio; // status buckets track the ratio
+                case 'commonModel': return a.commonModel.localeCompare(b.commonModel);
+                case 'commonManufacturingYear': {
+                    const toNum = v => (!v || v === 'Unknown') ? -Infinity : parseInt(v, 10);
+                    return toNum(a.commonManufacturingYear) - toNum(b.commonManufacturingYear);
+                }
+                case 'recentSync': {
+                    const toTs = v => {
+                        if (!v || v === 'Unknown') return -Infinity;
+                        const t = Date.parse(v);
+                        return isNaN(t) ? -Infinity : t;
+                    };
+                    return toTs(a.recentSync) - toTs(b.recentSync);
+                }
+                default: return a.devices - b.devices;
+            }
+        }
+
+        function sortData(data, sortField) {
+            // Keep module sort state in sync with the requested field. If the
+            // field matches the current state, preserve the toggled direction;
+            // otherwise reset to that field's natural direction.
+            if (sortField && sortField !== currentSortField) {
+                currentSortField = sortField;
+                currentSortOrder = defaultOrderFor(sortField);
+            }
+            const dir = currentSortOrder === 'asc' ? 1 : -1;
+            const field = currentSortField;
+            return data.sort((a, b) => compareByField(a, b, field) * dir);
+        }
+
         function sortTable(field) {
             if (currentSortField === field) {
                 currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
             } else {
                 currentSortField = field;
-                currentSortOrder = 'desc';
+                currentSortOrder = defaultOrderFor(field);
             }
-            
-            // Update sort dropdown to match
             const sortSelect = document.getElementById('sortBy');
-            sortSelect.value = field;
-            
+            if (sortSelect && sortSelect.value !== field) sortSelect.value = field;
             debouncedUpdateCharts();
         }
 
