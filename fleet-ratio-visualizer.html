@@ -330,11 +330,16 @@
                         <input type="number" id="cfgRatioAcceptable" step="0.01" min="0" value="1.5" style="padding: 6px;" />
                     </label>
                 </div>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                     <button type="button" id="cfgSaveBtn" style="padding: 8px 16px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Save</button>
                     <button type="button" id="cfgResetBtn" style="padding: 8px 16px; background: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer;">Reset to defaults</button>
-                    <span id="cfgStatus" style="align-self: center; color: #27ae60; font-weight: 600;"></span>
+                    <button type="button" id="cfgLoadFileBtn" style="padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Load from file...</button>
+                    <input type="file" id="cfgFileInput" accept=".json,application/json" style="display: none;" />
+                    <span id="cfgStatus" style="color: #27ae60; font-weight: 600;"></span>
                 </div>
+                <p style="margin-top: 10px; color: #7f8c8d; font-size: 0.9em;">
+                    Tip: place your config at <code>data/config.json</code> (git-ignored). It auto-loads on page open when localStorage is empty. If your browser blocks the auto-fetch (common with <code>file://</code>), use <strong>Load from file...</strong> instead. See <code>example.config.json</code> for the format.
+                </p>
             </div>
         </details>
 
@@ -523,10 +528,15 @@
 
     <script>
         // --- Configuration module -----------------------------------------
-        // All org-specific behavior (OU prefix, exclusions, thresholds, title)
-        // lives here and is persisted to localStorage. Neutral defaults so the
-        // tool works for any Google Workspace tenant out of the box.
+        // Source precedence at page load:
+        //   1. localStorage (user has clicked Save in this browser)
+        //   2. ./data/config.json (fetched; only works if the browser permits
+        //      file:// → file:// fetches, or the page is served over http)
+        //   3. DEFAULT_CONFIG (neutral defaults)
+        // A "Load from file..." button in the Settings panel provides a
+        // reliable manual path when auto-fetch is blocked by the browser.
         const CONFIG_STORAGE_KEY = 'chromebookViz.config';
+        const CONFIG_FILE_PATH = './data/config.json';
         const DEFAULT_CONFIG = {
             ouPrefix: '',
             groupingDepth: 1,
@@ -535,27 +545,47 @@
             dashboardTitle: 'Student-to-Chromebook Ratio Visualizer'
         };
 
-        function loadConfig() {
+        function normalizeConfig(parsed) {
+            return {
+                ouPrefix: typeof parsed.ouPrefix === 'string' ? parsed.ouPrefix : DEFAULT_CONFIG.ouPrefix,
+                groupingDepth: Number.isInteger(parsed.groupingDepth) ? parsed.groupingDepth : DEFAULT_CONFIG.groupingDepth,
+                excludedPathPatterns: Array.isArray(parsed.excludedPathPatterns) ? parsed.excludedPathPatterns.filter(s => typeof s === 'string') : DEFAULT_CONFIG.excludedPathPatterns,
+                ratioThresholds: {
+                    good: Number(parsed.ratioThresholds?.good) || DEFAULT_CONFIG.ratioThresholds.good,
+                    acceptable: Number(parsed.ratioThresholds?.acceptable) || DEFAULT_CONFIG.ratioThresholds.acceptable
+                },
+                dashboardTitle: typeof parsed.dashboardTitle === 'string' && parsed.dashboardTitle
+                    ? parsed.dashboardTitle
+                    : DEFAULT_CONFIG.dashboardTitle
+            };
+        }
+
+        function loadConfigFromLocalStorage() {
             try {
                 const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
-                if (!raw) return structuredClone(DEFAULT_CONFIG);
-                const parsed = JSON.parse(raw);
-                return {
-                    ouPrefix: typeof parsed.ouPrefix === 'string' ? parsed.ouPrefix : DEFAULT_CONFIG.ouPrefix,
-                    groupingDepth: Number.isInteger(parsed.groupingDepth) ? parsed.groupingDepth : DEFAULT_CONFIG.groupingDepth,
-                    excludedPathPatterns: Array.isArray(parsed.excludedPathPatterns) ? parsed.excludedPathPatterns : DEFAULT_CONFIG.excludedPathPatterns,
-                    ratioThresholds: {
-                        good: Number(parsed.ratioThresholds?.good) || DEFAULT_CONFIG.ratioThresholds.good,
-                        acceptable: Number(parsed.ratioThresholds?.acceptable) || DEFAULT_CONFIG.ratioThresholds.acceptable
-                    },
-                    dashboardTitle: typeof parsed.dashboardTitle === 'string' && parsed.dashboardTitle
-                        ? parsed.dashboardTitle
-                        : DEFAULT_CONFIG.dashboardTitle
-                };
+                if (!raw) return null;
+                return normalizeConfig(JSON.parse(raw));
             } catch (err) {
-                console.warn('Failed to load config from localStorage, using defaults:', err);
-                return structuredClone(DEFAULT_CONFIG);
+                console.warn('Failed to load config from localStorage:', err);
+                return null;
             }
+        }
+
+        async function loadConfigFromFile() {
+            try {
+                const response = await fetch(CONFIG_FILE_PATH, { cache: 'no-store' });
+                if (!response.ok) return null;
+                const parsed = await response.json();
+                return normalizeConfig(parsed);
+            } catch (err) {
+                // Most common cause: browser blocks file:// → file:// fetches.
+                // Fall through silently; user can still use "Load from file..." button.
+                return null;
+            }
+        }
+
+        function loadConfig() {
+            return loadConfigFromLocalStorage() || structuredClone(DEFAULT_CONFIG);
         }
 
         function saveConfig(cfg) {
@@ -661,17 +691,58 @@
             flashSettingsStatus('Saved');
         });
 
-        document.getElementById('cfgResetBtn').addEventListener('click', () => {
+        document.getElementById('cfgResetBtn').addEventListener('click', async () => {
             localStorage.removeItem(CONFIG_STORAGE_KEY);
-            config = loadConfig();
+            const fromFile = await loadConfigFromFile();
+            config = fromFile || structuredClone(DEFAULT_CONFIG);
             populateSettingsForm();
             applyConfigToUI();
             reparseIfLoaded();
-            flashSettingsStatus('Reset to defaults');
+            flashSettingsStatus(fromFile ? 'Reset — loaded from data/config.json' : 'Reset to defaults');
         });
 
+        document.getElementById('cfgLoadFileBtn').addEventListener('click', () => {
+            document.getElementById('cfgFileInput').click();
+        });
+
+        document.getElementById('cfgFileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    config = normalizeConfig(JSON.parse(e.target.result));
+                    populateSettingsForm();
+                    applyConfigToUI();
+                    reparseIfLoaded();
+                    flashSettingsStatus(`Loaded ${file.name} (click Save to persist)`);
+                } catch (err) {
+                    flashSettingsStatus('Invalid JSON: ' + err.message);
+                    console.error('Config file parse error:', err);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        });
+
+        // Initial render with whatever localStorage gave us.
         populateSettingsForm();
         applyConfigToUI();
+
+        // Then, if localStorage was empty, try to hydrate from data/config.json.
+        // Runs asynchronously so the page isn't blocked on a fetch that may be
+        // refused by the browser (common for file:// origins).
+        if (!loadConfigFromLocalStorage()) {
+            loadConfigFromFile().then(fromFile => {
+                if (fromFile) {
+                    config = fromFile;
+                    populateSettingsForm();
+                    applyConfigToUI();
+                    reparseIfLoaded();
+                    flashSettingsStatus('Loaded data/config.json');
+                }
+            });
+        }
 
         function debouncedUpdateCharts() {
             clearTimeout(updateTimeout);

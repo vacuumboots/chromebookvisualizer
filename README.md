@@ -25,7 +25,7 @@ No build step, no dependencies to install. Chart.js is loaded from a CDN inside 
 
 ## Configuration
 
-Settings live in your browser's `localStorage` (key: `chromebookViz.config`). They're private to your machine — nothing is ever sent anywhere.
+The tool exposes a **Settings** panel with the following fields:
 
 | Field | What it does | Example |
 | --- | --- | --- |
@@ -35,7 +35,29 @@ Settings live in your browser's `localStorage` (key: `chromebookViz.config`). Th
 | **Ratio thresholds** | `Good` is the green upper bound; `Acceptable` is the yellow upper bound; anything above is red. | `1.2` / `1.5` |
 | **Dashboard title** | Sets the browser tab title and the page header, for self-branding. | `Acme ISD Chromebook Ratios` |
 
-Click **Save** to apply. If CSVs are already loaded, they'll be re-processed against the new settings. Click **Reset to defaults** to clear everything and restore the empty defaults.
+### Where settings come from
+
+At page load, settings are resolved in this order:
+
+1. **`localStorage`** (key `chromebookViz.config`) — whatever you last clicked **Save** with, in this browser. Takes precedence.
+2. **`data/config.json`** — a git-ignored file you can commit to your local filesystem. Auto-loaded via `fetch()` when localStorage is empty. Useful if you want a portable config that doesn't live in a single browser's storage.
+3. **Neutral defaults** — if neither of the above is available.
+
+`example.config.json` is checked into the repo and shows the JSON schema with worked FSD38 values. Copy it to `data/config.json`, adjust for your org, and it will auto-load on next page open.
+
+### Working around `file://` fetch restrictions
+
+Most browsers (Chrome, Edge) refuse to `fetch()` a local file from a page opened via `file://`. If auto-load silently does nothing, you have three options:
+
+- Click **Load from file...** in the Settings panel and pick your `data/config.json` (or any valid JSON). This uses the browser's file-picker API, which has no origin restriction.
+- Serve the folder with a tiny local HTTP server, e.g. `python3 -m http.server 8000`, then open `http://localhost:8000/fleet-ratio-visualizer.html`. Auto-fetch works over HTTP.
+- Just type the values into the Settings panel and click **Save** — the values persist in `localStorage` for that browser.
+
+### Buttons
+
+- **Save** — persists current form values to `localStorage`. Re-runs the pipeline if CSVs are already loaded.
+- **Reset to defaults** — clears `localStorage` and re-loads from `data/config.json` (if present) or neutral defaults.
+- **Load from file...** — opens a file picker, loads JSON into the form (does not auto-save; click **Save** to persist).
 
 ## Exporting your data
 
@@ -93,9 +115,12 @@ A row is kept only if **all** of the following hold:
 
 ```
 fleet-ratio-visualizer.html   The tool. Pure HTML + inline JS + Chart.js.
+example.config.json           Worked example of the Settings-panel config (FSD38 values).
 README.md                     This file.
 .gitignore                    Keeps data/, CLAUDE.md, .claude/ out of git.
-data/                         (Local only, git-ignored.) Place your CSV exports here.
+data/                         (Local only, git-ignored.)
+  config.json                 Your real config; auto-loaded when localStorage is empty.
+  *.csv                       Your Google Workspace exports.
 ```
 
 No build system, no package manager, no tests. Open the HTML, edit, reload.
