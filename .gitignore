@@ -1,0 +1,12 @@
+# Local Google Workspace exports — may contain PII (emails, serials, IPs)
+data/
+
+# Claude Code working notes (not part of the public project)
+CLAUDE.md
+.claude/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

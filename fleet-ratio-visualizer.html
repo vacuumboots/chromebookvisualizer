@@ -1,0 +1,2290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student-to-Chromebook Ratio Visualizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            margin: 0;
+        }
+        
+        .header p {
+            color: #7f8c8d;
+            margin: 10px 0 0 0;
+        }
+        
+        .file-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .file-input-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .file-input-section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        
+        .file-input-section.loaded {
+            border-left: 4px solid #27ae60;
+        }
+        
+        .file-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px dashed #bdc3c7;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        
+        .file-input:hover {
+            border-color: #3498db;
+        }
+        
+        .file-status {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .file-status.loaded {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .file-status.error {
+            color: #e74c3c;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-card.devices {
+            border-left: 4px solid #3498db;
+        }
+        
+        .stat-card.students {
+            border-left: 4px solid #9b59b6;
+        }
+        
+        .stat-card.ratio {
+            border-left: 4px solid #e67e22;
+        }
+        
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .stat-number.devices { color: #3498db; }
+        .stat-number.students { color: #9b59b6; }
+        .stat-number.ratio { color: #e67e22; }
+        
+        .stat-label {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .control-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .control-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .control-group select, .control-group input {
+            padding: 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .error {
+            color: #e74c3c;
+            background: #fdf2f2;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #e74c3c;
+            margin: 10px 0;
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .file-inputs {
+                grid-template-columns: 1fr;
+            }
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .data-table th, .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+        
+        .data-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        
+        .data-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .ratio-indicator {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .ratio-good {
+            background: #d5f4e6;
+            color: #27ae60;
+        }
+        
+        .ratio-warn {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .ratio-critical {
+            background: #fadbd8;
+            color: #e74c3c;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* Checkbox filter styling */
+        .checkbox-filter {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            padding: 8px;
+            background: white;
+            font-size: 13px;
+        }
+        
+        .checkbox-filter label {
+            display: flex;
+            align-items: center;
+            margin: 2px 0;
+            font-weight: normal;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        
+        .checkbox-filter label:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .checkbox-filter input[type="checkbox"] {
+            margin-right: 6px;
+            cursor: pointer;
+        }
+        
+        .checkbox-filter input[type="checkbox"]:checked + span {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 id="dashboardTitle">📊 Student-to-Chromebook Ratio Visualizer</h1>
+            <p>Analyze device distribution and student ratios across all schools</p>
+        </div>
+
+        <details class="chart-container" style="margin-bottom: 20px;">
+            <summary style="cursor: pointer; font-weight: 600; color: #2c3e50; font-size: 1.1em;">⚙️ Settings (adapt this tool to your organization)</summary>
+            <div style="margin-top: 15px; color: #34495e; line-height: 1.6;">
+                <p style="margin-top: 0;">Your settings are stored in this browser (<code>localStorage</code>) and never leave your machine. Click <strong>Save</strong> to apply; if CSVs are already loaded they will be re-processed with the new settings.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                    <label style="display: flex; flex-direction: column; gap: 4px;">
+                        <span>OU prefix <small style="color: #7f8c8d;">(leave empty to include every OU)</small></span>
+                        <input type="text" id="cfgOuPrefix" placeholder="/your/ou/prefix/" style="padding: 6px; font-family: monospace;" />
+                    </label>
+                    <label style="display: flex; flex-direction: column; gap: 4px;">
+                        <span>Group-name depth after prefix <small style="color: #7f8c8d;">(1 = first segment; 0 = full remaining path)</small></span>
+                        <input type="number" id="cfgGroupingDepth" min="0" step="1" value="1" style="padding: 6px;" />
+                    </label>
+                    <label style="display: flex; flex-direction: column; gap: 4px;">
+                        <span>Dashboard title</span>
+                        <input type="text" id="cfgDashboardTitle" placeholder="Student-to-Chromebook Ratio Visualizer" style="padding: 6px;" />
+                    </label>
+                </div>
+                <label style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px;">
+                    <span>Exclude OU paths containing <small style="color: #7f8c8d;">(comma- or newline-separated, case-insensitive substring match)</small></span>
+                    <textarea id="cfgExcludedPatterns" rows="2" placeholder="/staff, exam" style="padding: 6px; font-family: monospace;"></textarea>
+                </label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                    <label style="display: flex; flex-direction: column; gap: 4px;">
+                        <span>Good ratio ≤</span>
+                        <input type="number" id="cfgRatioGood" step="0.01" min="0" value="1.2" style="padding: 6px;" />
+                    </label>
+                    <label style="display: flex; flex-direction: column; gap: 4px;">
+                        <span>Acceptable ratio ≤</span>
+                        <input type="number" id="cfgRatioAcceptable" step="0.01" min="0" value="1.5" style="padding: 6px;" />
+                    </label>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" id="cfgSaveBtn" style="padding: 8px 16px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Save</button>
+                    <button type="button" id="cfgResetBtn" style="padding: 8px 16px; background: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer;">Reset to defaults</button>
+                    <span id="cfgStatus" style="align-self: center; color: #27ae60; font-weight: 600;"></span>
+                </div>
+            </div>
+        </details>
+
+        <div class="file-inputs">
+            <div class="file-input-section" id="devicesSection">
+                <h3>🖥️ Chromebook Devices CSV</h3>
+                <input type="file" id="devicesFile" accept=".csv" class="file-input" />
+                <div id="devicesStatus" class="file-status">No file loaded</div>
+            </div>
+            <div class="file-input-section" id="usersSection">
+                <h3>👥 Users CSV</h3>
+                <input type="file" id="usersFile" accept=".csv" class="file-input" />
+                <div id="usersStatus" class="file-status">No file loaded</div>
+            </div>
+        </div>
+
+        <div class="chart-container" style="margin-bottom: 20px;">
+            <h3 style="color: #2c3e50; margin-bottom: 15px;">📋 How to Use This Tool</h3>
+            <div style="color: #34495e; line-height: 1.6;">
+                <p><strong>Step 1: Export your CSVs from Google Workspace Admin Console, then upload</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 15px;">
+                    <li><strong>Chromebook Devices CSV:</strong> Admin Console &rarr; Devices &rarr; Chrome devices &rarr; Export. Upload the resulting file (filename is a UUID, e.g. <code>824d4ee6-…csv</code>).</li>
+                    <li><strong>Users CSV:</strong> Admin Console &rarr; Directory &rarr; Users &rarr; Download users &rarr; "All user info". Upload the resulting <code>User_Download_&lt;date&gt;_&lt;time&gt;.csv</code> file as-is. The tool keeps only users whose <code>Status</code> is <code>Active</code>; any further OU-based filtering is controlled by <strong>Settings</strong> above.</li>
+                </ul>
+                
+                <p><strong>Step 2: Filter your data (optional)</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 15px;">
+                    <li><strong>Search School:</strong> Type part of a school name to focus on specific schools</li>
+                    <li><strong>Filter by Model:</strong> Check boxes to see only specific Chromebook models (e.g., "Acer Chromebook")</li>
+                    <li><strong>Filter by Year:</strong> Check boxes to see only devices made in certain years</li>
+                    <li><strong>Filter by OS Version:</strong> Check boxes to see devices running specific Chrome OS versions</li>
+                </ul>
+                
+                <p><strong>Step 3: View your results</strong></p>
+                <ul style="margin-left: 20px;">
+                    <li><strong>Charts show:</strong> Device counts, student counts, or student-to-device ratios by school</li>
+                    <li><strong>Tables show:</strong> Detailed breakdown by school and individual device information</li>
+                    <li><strong>Color coding:</strong> <span id="colorCodingHelp">Green = Good, Yellow = Acceptable, Red = High (thresholds set in Settings)</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="errorSection" class="error hidden"></div>
+
+        <div id="content" class="hidden">
+            <div class="stats-grid">
+                <div class="stat-card devices">
+                    <div class="stat-number devices" id="totalDevices">0</div>
+                    <div class="stat-label">Total Chromebooks</div>
+                </div>
+                <div class="stat-card students">
+                    <div class="stat-number students" id="totalStudents">0</div>
+                    <div class="stat-label">Active Students</div>
+                </div>
+                <div class="stat-card ratio">
+                    <div class="stat-number ratio" id="overallRatio">0</div>
+                    <div class="stat-label">Students per Device</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalSchools">0</div>
+                    <div class="stat-label">Schools</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-row">
+                    <div class="control-group">
+                        <label for="chartType">Chart Type:</label>
+                        <select id="chartType">
+                            <option value="bar">Bar Chart</option>
+                            <option value="pie">Pie Chart</option>
+                            <option value="doughnut">Doughnut Chart</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="viewMode">View:</label>
+                        <select id="viewMode">
+                            <option value="devices">Devices per School</option>
+                            <option value="students">Students per School</option>
+                            <option value="ratio">Student-to-Device Ratio</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="searchSchool">Search School:</label>
+                        <input type="text" id="searchSchool" placeholder="Type to filter..." />
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label for="modelFilter">Filter by Model: <span style="font-size: 0.8em; color: #7f8c8d;">(✓ Select multiple)</span></label>
+                        <div class="checkbox-filter" id="modelFilterContainer">
+                            <!-- Checkboxes will be populated dynamically -->
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="yearFilter">Filter by Manufacturing Year: <span style="font-size: 0.8em; color: #7f8c8d;">(✓ Select multiple)</span></label>
+                        <div class="checkbox-filter" id="yearFilterContainer">
+                            <!-- Checkboxes will be populated dynamically -->
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="osVersionFilter">Filter by OS Version: <span style="font-size: 0.8em; color: #7f8c8d;">(✓ Select multiple)</span></label>
+                        <div class="checkbox-filter" id="osVersionFilterContainer">
+                            <!-- Checkboxes will be populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label for="sortBy">Sort by:</label>
+                        <select id="sortBy">
+                            <option value="devices">Devices (High to Low)</option>
+                            <option value="school">School Name (A-Z)</option>
+                            <option value="ratio">Ratio (High to Low)</option>
+                            <option value="commonModel">Model (A-Z)</option>
+                            <option value="recentSync">Recent Sync (Newest)</option>
+                            <option value="commonManufacturingYear">Manufacturing Year (Newest)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h2 class="chart-title" id="mainChartTitle">Distribution by School</h2>
+                <canvas id="mainChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h2 class="chart-title">Ratio Overview</h2>
+                <canvas id="ratioChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h2 class="chart-title">Selected Models Breakdown</h2>
+                <div style="max-height: 400px;">
+                    <canvas id="modelsChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h2 class="chart-title">OS Version Distribution</h2>
+                <div style="max-height: 400px;">
+                    <canvas id="osVersionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h2 class="chart-title">Detailed School Analysis</h2>
+                <div style="max-height: 500px; overflow-y: auto;">
+                    <table class="data-table" id="dataTable">
+                        <thead>
+                            <tr>
+                                <th style="cursor: pointer;" onclick="sortTable('school')">School ↕</th>
+                                <th style="cursor: pointer;" onclick="sortTable('devices')">Chromebooks ↕</th>
+                                <th style="cursor: pointer;" onclick="sortTable('students')">Active Students ↕</th>
+                                <th style="cursor: pointer;" onclick="sortTable('ratio')">Ratio ↕</th>
+                                <th style="cursor: pointer;" onclick="sortTable('commonModel')">Most Common Model ↕</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h2 class="chart-title">Individual Device Details</h2>
+                <div style="max-height: 600px; overflow-y: auto;">
+                    <table class="data-table" id="deviceTable">
+                        <thead>
+                            <tr>
+                                <th style="cursor: pointer;" onclick="sortDeviceTable('school')">School ↕</th>
+                                <th style="cursor: pointer;" onclick="sortDeviceTable('model')">Model Name ↕</th>
+                                <th style="cursor: pointer;" onclick="sortDeviceTable('manufacturingYear')">Mfg Year ↕</th>
+                                <th style="cursor: pointer;" onclick="sortDeviceTable('lastPolicySync')">Last Policy Sync ↕</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deviceTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration module -----------------------------------------
+        // All org-specific behavior (OU prefix, exclusions, thresholds, title)
+        // lives here and is persisted to localStorage. Neutral defaults so the
+        // tool works for any Google Workspace tenant out of the box.
+        const CONFIG_STORAGE_KEY = 'chromebookViz.config';
+        const DEFAULT_CONFIG = {
+            ouPrefix: '',
+            groupingDepth: 1,
+            excludedPathPatterns: [],
+            ratioThresholds: { good: 1.2, acceptable: 1.5 },
+            dashboardTitle: 'Student-to-Chromebook Ratio Visualizer'
+        };
+
+        function loadConfig() {
+            try {
+                const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
+                if (!raw) return structuredClone(DEFAULT_CONFIG);
+                const parsed = JSON.parse(raw);
+                return {
+                    ouPrefix: typeof parsed.ouPrefix === 'string' ? parsed.ouPrefix : DEFAULT_CONFIG.ouPrefix,
+                    groupingDepth: Number.isInteger(parsed.groupingDepth) ? parsed.groupingDepth : DEFAULT_CONFIG.groupingDepth,
+                    excludedPathPatterns: Array.isArray(parsed.excludedPathPatterns) ? parsed.excludedPathPatterns : DEFAULT_CONFIG.excludedPathPatterns,
+                    ratioThresholds: {
+                        good: Number(parsed.ratioThresholds?.good) || DEFAULT_CONFIG.ratioThresholds.good,
+                        acceptable: Number(parsed.ratioThresholds?.acceptable) || DEFAULT_CONFIG.ratioThresholds.acceptable
+                    },
+                    dashboardTitle: typeof parsed.dashboardTitle === 'string' && parsed.dashboardTitle
+                        ? parsed.dashboardTitle
+                        : DEFAULT_CONFIG.dashboardTitle
+                };
+            } catch (err) {
+                console.warn('Failed to load config from localStorage, using defaults:', err);
+                return structuredClone(DEFAULT_CONFIG);
+            }
+        }
+
+        function saveConfig(cfg) {
+            localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(cfg));
+        }
+
+        function parsePatternList(text) {
+            return (text || '')
+                .split(/[,\n]/)
+                .map(s => s.trim())
+                .filter(Boolean);
+        }
+
+        function isPathExcluded(orgPath) {
+            if (!config.excludedPathPatterns.length) return false;
+            const lower = orgPath.toLowerCase();
+            return config.excludedPathPatterns.some(p => lower.includes(p.toLowerCase()));
+        }
+
+        function applyConfigToUI() {
+            document.title = config.dashboardTitle;
+            const titleEl = document.getElementById('dashboardTitle');
+            if (titleEl) titleEl.textContent = '📊 ' + config.dashboardTitle;
+            const helpEl = document.getElementById('colorCodingHelp');
+            if (helpEl) {
+                const g = config.ratioThresholds.good;
+                const a = config.ratioThresholds.acceptable;
+                helpEl.textContent = `Green = Good (≤${g}), Yellow = Acceptable (${g}-${a}), Red = High (>${a})`;
+            }
+        }
+
+        let config = loadConfig();
+
+        // --- Application state --------------------------------------------
+        let devicesData = [];
+        let studentsData = [];
+        let combinedData = [];
+        let deviceLevelData = [];
+        let mainChart = null;
+        let ratioChart = null;
+        let modelsChart = null;
+        let osVersionChart = null;
+        let updateTimeout = null;
+        let currentSortField = 'devices';
+        let currentSortOrder = 'desc';
+        // Retain raw CSV text so a Settings change can re-run the pipeline.
+        let lastDevicesCsvText = null;
+        let lastUsersCsvText = null;
+
+        document.getElementById('devicesFile').addEventListener('change', (e) => handleFileSelect(e, 'devices'));
+        document.getElementById('usersFile').addEventListener('change', (e) => handleFileSelect(e, 'users'));
+        document.getElementById('chartType').addEventListener('change', debouncedUpdateCharts);
+        document.getElementById('viewMode').addEventListener('change', debouncedUpdateCharts);
+        document.getElementById('searchSchool').addEventListener('input', debouncedUpdateCharts);
+        // Event listeners for checkbox filters will be added dynamically
+        document.getElementById('sortBy').addEventListener('change', debouncedUpdateCharts);
+
+        // --- Settings panel wiring ----------------------------------------
+        function populateSettingsForm() {
+            document.getElementById('cfgOuPrefix').value = config.ouPrefix;
+            document.getElementById('cfgGroupingDepth').value = config.groupingDepth;
+            document.getElementById('cfgDashboardTitle').value = config.dashboardTitle;
+            document.getElementById('cfgExcludedPatterns').value = config.excludedPathPatterns.join(', ');
+            document.getElementById('cfgRatioGood').value = config.ratioThresholds.good;
+            document.getElementById('cfgRatioAcceptable').value = config.ratioThresholds.acceptable;
+        }
+
+        function readSettingsForm() {
+            return {
+                ouPrefix: document.getElementById('cfgOuPrefix').value.trim(),
+                groupingDepth: Math.max(0, parseInt(document.getElementById('cfgGroupingDepth').value, 10) || 0),
+                dashboardTitle: document.getElementById('cfgDashboardTitle').value.trim() || DEFAULT_CONFIG.dashboardTitle,
+                excludedPathPatterns: parsePatternList(document.getElementById('cfgExcludedPatterns').value),
+                ratioThresholds: {
+                    good: Number(document.getElementById('cfgRatioGood').value) || DEFAULT_CONFIG.ratioThresholds.good,
+                    acceptable: Number(document.getElementById('cfgRatioAcceptable').value) || DEFAULT_CONFIG.ratioThresholds.acceptable
+                }
+            };
+        }
+
+        function flashSettingsStatus(msg) {
+            const el = document.getElementById('cfgStatus');
+            el.textContent = msg;
+            setTimeout(() => { el.textContent = ''; }, 2500);
+        }
+
+        function reparseIfLoaded() {
+            if (lastDevicesCsvText) parseDevicesCSV(lastDevicesCsvText);
+            if (lastUsersCsvText) parseUsersCSV(lastUsersCsvText);
+            if (devicesData.length > 0 && studentsData.length > 0) {
+                processCombinedData();
+                updateStats();
+                updateCharts();
+                document.getElementById('content').classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('cfgSaveBtn').addEventListener('click', () => {
+            config = readSettingsForm();
+            saveConfig(config);
+            applyConfigToUI();
+            reparseIfLoaded();
+            flashSettingsStatus('Saved');
+        });
+
+        document.getElementById('cfgResetBtn').addEventListener('click', () => {
+            localStorage.removeItem(CONFIG_STORAGE_KEY);
+            config = loadConfig();
+            populateSettingsForm();
+            applyConfigToUI();
+            reparseIfLoaded();
+            flashSettingsStatus('Reset to defaults');
+        });
+
+        populateSettingsForm();
+        applyConfigToUI();
+
+        function debouncedUpdateCharts() {
+            clearTimeout(updateTimeout);
+            updateTimeout = setTimeout(updateCharts, 300); // Wait 300ms before updating
+        }
+
+        function handleFileSelect(event, type) {
+            const file = event.target.files[0];
+            if (file) {
+                console.log(`Selected ${type} file:`, file.name, 'Size:', file.size, 'bytes');
+                const reader = new FileReader();
+                
+                reader.onerror = function(e) {
+                    console.error(`Error reading ${type} file:`, e);
+                    updateFileStatus(type, 'error', 'Failed to read file');
+                    showError(`Error reading ${type} file: Failed to read file`);
+                };
+                
+                reader.onload = function(e) {
+                    try {
+                        console.log(`Loading ${type} file...`);
+                        console.log(`File content length: ${e.target.result ? e.target.result.length : 'undefined'}`);
+                        
+                        if (!e.target.result) {
+                            throw new Error('File content is empty or could not be read');
+                        }
+                        
+                        if (type === 'devices') {
+                            lastDevicesCsvText = e.target.result;
+                            parseDevicesCSV(e.target.result);
+                            updateFileStatus('devices', 'loaded', `Loaded ${devicesData.length} devices`);
+                        } else {
+                            lastUsersCsvText = e.target.result;
+                            parseUsersCSV(e.target.result);
+                            updateFileStatus('users', 'loaded', `Loaded ${studentsData.length} active students`);
+                        }
+                        
+                        if (devicesData.length > 0 && studentsData.length > 0) {
+                            processCombinedData();
+                            updateStats();
+                            updateCharts();
+                            document.getElementById('content').classList.remove('hidden');
+                            hideError();
+                        }
+                        
+                    } catch (error) {
+                        console.error(`Error parsing ${type} CSV:`, error);
+                        console.error(`Error stack:`, error.stack);
+                        updateFileStatus(type, 'error', error.message);
+                        showError(`Error parsing ${type} CSV: ` + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function parseDevicesCSV(csvText) {
+            const lines = splitCSVRecords(csvText);
+            
+            if (lines.length < 2) {
+                throw new Error('Devices CSV must have at least a header row and one data row');
+            }
+
+            const headers = parseCSVLine(lines[0]);
+            console.log('Device headers:', headers);
+            
+            const orgUnitPathIndex = headers.findIndex(header => 
+                header.toLowerCase().includes('orgunitpath')
+            );
+            const modelIndex = headers.findIndex(header => 
+                header.toLowerCase() === 'model'
+            );
+            const lastPolicySyncIndex = headers.findIndex(header => 
+                header.toLowerCase() === 'lastpolicysync'
+            );
+            const manufacturingDateIndex = headers.findIndex(header => 
+                header.toLowerCase() === 'manufacturingdate'
+            );
+            const osVersionIndex = headers.findIndex(header => 
+                header.toLowerCase() === 'osversion'
+            );
+            
+            if (orgUnitPathIndex === -1) {
+                throw new Error('orgUnitPath column not found in devices CSV');
+            }
+            if (modelIndex === -1) {
+                console.warn('model column not found in devices CSV');
+            }
+            if (lastPolicySyncIndex === -1) {
+                console.warn('lastPolicySync column not found in devices CSV');
+            }
+            if (manufacturingDateIndex === -1) {
+                console.warn('manufacturingDate column not found in devices CSV');
+            }
+            if (osVersionIndex === -1) {
+                console.warn('osVersion column not found in devices CSV');
+            }
+
+            devicesData = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line) {
+                    try {
+                        const values = parseCSVLine(line);
+                        if (values.length > orgUnitPathIndex && values[orgUnitPathIndex]) {
+                            const orgPath = values[orgUnitPathIndex].trim();
+                            if (orgPath && (config.ouPrefix === '' || orgPath.startsWith(config.ouPrefix)) && !isPathExcluded(orgPath)) {
+                                const device = { orgUnitPath: orgPath };
+                                
+                                // Add model if available
+                                if (modelIndex !== -1 && values.length > modelIndex) {
+                                    device.model = values[modelIndex]?.trim() || 'Unknown';
+                                }
+                                
+                                // Add lastPolicySync if available
+                                if (lastPolicySyncIndex !== -1 && values.length > lastPolicySyncIndex) {
+                                    device.lastPolicySync = values[lastPolicySyncIndex]?.trim() || '';
+                                }
+                                
+                                // Add manufacturingDate if available
+                                if (manufacturingDateIndex !== -1 && values.length > manufacturingDateIndex) {
+                                    device.manufacturingDate = values[manufacturingDateIndex]?.trim() || '';
+                                }
+                                
+                                // Add osVersion if available
+                                if (osVersionIndex !== -1 && values.length > osVersionIndex) {
+                                    device.osVersion = values[osVersionIndex]?.trim() || '';
+                                }
+                                
+                                devicesData.push(device);
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Error parsing device line ${i + 1}:`, error);
+                    }
+                }
+            }
+
+            console.log(`Parsed ${devicesData.length} devices`);
+        }
+
+        function parseUsersCSV(csvText) {
+            try {
+                console.log('Starting to parse Users CSV...');
+                console.log('CSV text length:', csvText ? csvText.length : 'undefined');
+                
+                if (!csvText || csvText.trim() === '') {
+                    throw new Error('CSV text is empty or undefined');
+                }
+                
+                const lines = splitCSVRecords(csvText);
+                console.log('Number of lines after filtering:', lines.length);
+                
+                if (lines.length < 2) {
+                    throw new Error('Users CSV must have at least a header row and one data row');
+                }
+
+                const headers = parseCSVLine(lines[0]);
+                console.log('User headers:', headers);
+                console.log('Headers length:', headers.length);
+                
+                if (!headers || headers.length === 0) {
+                    throw new Error('No headers found in CSV');
+                }
+                
+                // Look for org unit path column (should be first column)
+                const orgUnitPathIndex = headers.findIndex(header =>
+                    header && header.trim() === 'Org Unit Path [Required]'
+                );
+
+                console.log('Org Unit Path column index:', orgUnitPathIndex);
+
+                if (orgUnitPathIndex === -1) {
+                    throw new Error('Org Unit Path [Required] column not found in users CSV. Available: ' + headers.join(', '));
+                }
+
+                // Status column is optional — older trimmed CSVs were pre-filtered to Active only
+                const statusIndex = headers.findIndex(header =>
+                    header && header.trim() === 'Status [READ ONLY]'
+                );
+                console.log('Status column index:', statusIndex, statusIndex === -1 ? '(absent — assuming all rows Active)' : '');
+
+                studentsData = [];
+                let validRows = 0;
+                let excludedFiltered = 0;
+                let suspendedFiltered = 0;
+                let errorRows = 0;
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line) {
+                        try {
+                            const values = parseCSVLine(line);
+                            
+                            if (!values || values.length === 0) {
+                                console.warn(`Line ${i + 1} produced no values`);
+                                errorRows++;
+                                continue;
+                            }
+                            
+                            if (values.length <= orgUnitPathIndex) {
+                                console.warn(`Line ${i + 1} has ${values.length} columns, but need index ${orgUnitPathIndex}`);
+                                errorRows++;
+                                continue;
+                            }
+                            
+                            const orgPath = values[orgUnitPathIndex];
+                            
+                            if (!orgPath) {
+                                console.warn(`Line ${i + 1} has empty org path`);
+                                errorRows++;
+                                continue;
+                            }
+                            
+                            const trimmedOrgPath = orgPath.trim();
+                            
+                            if (trimmedOrgPath && (config.ouPrefix === '' || trimmedOrgPath.startsWith(config.ouPrefix))) {
+                                // Apply configured path-substring exclusions (replaces the old
+                                // hardcoded Staff / Exam / administration / maint / etc. lists).
+                                if (isPathExcluded(trimmedOrgPath)) {
+                                    excludedFiltered++;
+                                    continue;
+                                }
+
+                                // If the CSV has a Status column, keep only Active users.
+                                // If absent (older trimmed CSV), assume all rows are Active.
+                                let status = 'Active';
+                                if (statusIndex !== -1 && values.length > statusIndex) {
+                                    status = (values[statusIndex] || '').trim();
+                                    if (status.toLowerCase() !== 'active') {
+                                        suspendedFiltered++;
+                                        continue;
+                                    }
+                                }
+
+                                studentsData.push({
+                                    orgUnitPath: trimmedOrgPath,
+                                    status: status
+                                });
+                                validRows++;
+                            }
+                        } catch (error) {
+                            console.error(`Error parsing user line ${i + 1}:`, error);
+                            console.error(`Problematic line content: "${line}"`);
+                            errorRows++;
+                        }
+                    }
+                }
+
+                console.log(`Parsed ${validRows} active students (filtered out ${excludedFiltered} by OU patterns, ${suspendedFiltered} non-Active accounts; ${errorRows} error rows)`);
+                
+                if (validRows === 0) {
+                    throw new Error('No valid student records found in CSV');
+                }
+                
+            } catch (error) {
+                console.error('Error in parseUsersCSV:', error);
+                throw error;
+            }
+        }
+
+
+        // Split CSV text into logical records. Honors quoted fields so that
+        // a \n or \r\n inside a quoted field does NOT terminate the record.
+        // Needed for Google Admin device exports where annotatedNotes can
+        // contain embedded newlines.
+        function splitCSVRecords(csvText) {
+            const records = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < csvText.length; i++) {
+                const char = csvText[i];
+                if (char === '"') {
+                    if (inQuotes && csvText[i + 1] === '"') {
+                        current += '""';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                        current += char;
+                    }
+                } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                    if (char === '\r' && csvText[i + 1] === '\n') i++;
+                    if (current.trim()) records.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            if (current.trim()) records.push(current);
+            return records;
+        }
+
+        function parseCSVLine(line) {
+            if (!line || typeof line !== 'string') {
+                console.warn('parseCSVLine received invalid input:', line);
+                return [];
+            }
+            
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            let i = 0;
+            
+            try {
+                while (i < line.length) {
+                    const char = line[i];
+                    
+                    if (char === '"') {
+                        if (inQuotes && line[i + 1] === '"') {
+                            current += '"';
+                            i += 2;
+                        } else {
+                            inQuotes = !inQuotes;
+                            i++;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        result.push(current.trim());
+                        current = '';
+                        i++;
+                    } else {
+                        current += char;
+                        i++;
+                    }
+                }
+                
+                result.push(current.trim());
+                return result;
+            } catch (error) {
+                console.error('Error in parseCSVLine:', error);
+                console.error('Line content:', line);
+                return [];
+            }
+        }
+
+        function processCombinedData() {
+            console.log('Processing combined data...');
+            console.log('Sample device paths:', devicesData.slice(0, 3).map(d => d.orgUnitPath));
+            console.log('Sample student paths:', studentsData.slice(0, 3).map(s => s.orgUnitPath));
+            
+            // Group devices by school
+            const deviceCounts = {};
+            const deviceDetails = {}; // Store additional device info by school
+            
+            devicesData.forEach(device => {
+                const school = extractSchoolName(device.orgUnitPath);
+                if (!school) return; // Skip excluded organizational units
+                
+                deviceCounts[school] = (deviceCounts[school] || 0) + 1;
+                
+                // Initialize school details if not exists
+                if (!deviceDetails[school]) {
+                    deviceDetails[school] = {
+                        models: {},
+                        lastSyncDates: [],
+                        manufacturingDates: {},
+                        manufacturingYears: {},
+                        osVersions: {}
+                    };
+                }
+                
+                // Track device models
+                if (device.model) {
+                    const model = device.model;
+                    deviceDetails[school].models[model] = (deviceDetails[school].models[model] || 0) + 1;
+                }
+                
+                // Track last policy sync dates
+                if (device.lastPolicySync && device.lastPolicySync !== '') {
+                    deviceDetails[school].lastSyncDates.push(device.lastPolicySync);
+                }
+                
+                // Track manufacturing dates
+                if (device.manufacturingDate && device.manufacturingDate !== '') {
+                    deviceDetails[school].manufacturingDates[device.manufacturingDate] = 
+                        (deviceDetails[school].manufacturingDates[device.manufacturingDate] || 0) + 1;
+                    
+                    // Extract year from manufacturing date
+                    try {
+                        const year = new Date(device.manufacturingDate).getFullYear();
+                        if (!isNaN(year) && year > 1900) {
+                            deviceDetails[school].manufacturingYears[year] = 
+                                (deviceDetails[school].manufacturingYears[year] || 0) + 1;
+                        }
+                    } catch (e) {
+                        console.warn('Invalid manufacturing date:', device.manufacturingDate);
+                    }
+                }
+                
+                // Track OS versions
+                if (device.osVersion && device.osVersion !== '') {
+                    deviceDetails[school].osVersions[device.osVersion] = 
+                        (deviceDetails[school].osVersions[device.osVersion] || 0) + 1;
+                }
+            });
+
+            // Group students by school
+            const studentCounts = {};
+            studentsData.forEach(student => {
+                const school = extractSchoolName(student.orgUnitPath);
+                if (!school) return; // Skip excluded organizational units
+                studentCounts[school] = (studentCounts[school] || 0) + 1;
+            });
+
+            console.log('Device counts by school:', Object.keys(deviceCounts).length, 'schools');
+            console.log('First 5 device schools:', Object.entries(deviceCounts).slice(0, 5));
+            console.log('Student counts by school:', Object.keys(studentCounts).length, 'schools');
+            console.log('First 5 student schools:', Object.entries(studentCounts).slice(0, 5));
+
+            // Combine data
+            const allSchools = new Set([...Object.keys(deviceCounts), ...Object.keys(studentCounts)]);
+            
+            combinedData = Array.from(allSchools).map(school => {
+                const devices = deviceCounts[school] || 0;
+                const students = studentCounts[school] || 0;
+                const ratio = devices > 0 ? (students / devices) : 0;
+                
+                // Get most common model, most recent sync, manufacturing info, and OS version info for this school
+                const schoolDetails = deviceDetails[school] || { 
+                    models: {}, 
+                    lastSyncDates: [],
+                    manufacturingDates: {},
+                    manufacturingYears: {},
+                    osVersions: {}
+                };
+                
+                // Ensure all properties are objects to prevent Object.entries errors
+                schoolDetails.models = schoolDetails.models || {};
+                schoolDetails.manufacturingYears = schoolDetails.manufacturingYears || {};
+                schoolDetails.osVersions = schoolDetails.osVersions || {};
+                
+                // Find most common model
+                let commonModel = 'Unknown';
+                let maxCount = 0;
+                if (schoolDetails.models && typeof schoolDetails.models === 'object') {
+                    Object.entries(schoolDetails.models).forEach(([model, count]) => {
+                        if (count > maxCount) {
+                            maxCount = count;
+                            commonModel = model;
+                        }
+                    });
+                }
+                
+                // Find most recent sync date
+                let recentSync = 'Unknown';
+                if (schoolDetails.lastSyncDates.length > 0) {
+                    // Sort dates and get the most recent
+                    const sortedDates = schoolDetails.lastSyncDates.sort((a, b) => new Date(b) - new Date(a));
+                    recentSync = sortedDates[0];
+                    
+                    // Format date for display
+                    try {
+                        const date = new Date(recentSync);
+                        if (!isNaN(date.getTime())) {
+                            recentSync = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                        }
+                    } catch (e) {
+                        // Keep original string if parsing fails
+                    }
+                }
+                
+                // Find most common manufacturing year
+                let commonYear = 'Unknown';
+                let maxYearCount = 0;
+                if (schoolDetails.manufacturingYears && typeof schoolDetails.manufacturingYears === 'object') {
+                    Object.entries(schoolDetails.manufacturingYears).forEach(([year, count]) => {
+                        if (count > maxYearCount) {
+                            maxYearCount = count;
+                            commonYear = year;
+                        }
+                    });
+                }
+                
+                // Find most common OS version
+                let commonOSVersion = 'Unknown';
+                let maxOSCount = 0;
+                if (schoolDetails.osVersions && typeof schoolDetails.osVersions === 'object') {
+                    Object.entries(schoolDetails.osVersions).forEach(([osVersion, count]) => {
+                        if (count > maxOSCount) {
+                            maxOSCount = count;
+                            commonOSVersion = osVersion;
+                        }
+                    });
+                }
+                
+                return {
+                    school: school,
+                    devices: devices,
+                    students: students,
+                    ratio: ratio,
+                    commonModel: commonModel,
+                    recentSync: recentSync,
+                    modelCounts: schoolDetails.models,
+                    commonManufacturingYear: commonYear,
+                    manufacturingYears: schoolDetails.manufacturingYears,
+                    manufacturingDates: schoolDetails.manufacturingDates,
+                    commonOSVersion: commonOSVersion,
+                    osVersions: schoolDetails.osVersions
+                };
+            }).sort((a, b) => b.devices - a.devices);
+
+            console.log('Final combined data:', combinedData.length, 'schools');
+            console.log('Top 5 schools:', combinedData.slice(0, 5));
+            
+            // Create device-level data for individual device table
+            createDeviceLevelData();
+            
+            // Populate filter dropdowns
+            populateModelFilter();
+            populateYearFilter();
+            populateOSVersionFilter();
+        }
+
+        function extractSchoolName(orgPath) {
+            // Derive a "group" name from an OU path using the configured prefix
+            // and grouping depth. Exclusion is already handled at parse time by
+            // isPathExcluded(), so this function just maps path → label.
+            let remainder = orgPath;
+            if (config.ouPrefix && remainder.startsWith(config.ouPrefix)) {
+                remainder = remainder.slice(config.ouPrefix.length);
+            }
+            const parts = remainder.split('/').filter(part => part.trim());
+            if (parts.length === 0) return 'Other';
+
+            if (config.groupingDepth === 0) {
+                return parts.join('/');
+            }
+            const idx = config.groupingDepth - 1;
+            return parts[idx] || parts[parts.length - 1];
+        }
+
+        function updateStats() {
+            const totalDevices = combinedData.reduce((sum, school) => sum + school.devices, 0);
+            const totalStudents = combinedData.reduce((sum, school) => sum + school.students, 0);
+            const overallRatio = totalDevices > 0 ? (totalStudents / totalDevices) : 0;
+            const totalSchools = combinedData.length;
+
+            document.getElementById('totalDevices').textContent = totalDevices.toLocaleString();
+            document.getElementById('totalStudents').textContent = totalStudents.toLocaleString();
+            document.getElementById('overallRatio').textContent = overallRatio.toFixed(2);
+            document.getElementById('totalSchools').textContent = totalSchools.toLocaleString();
+        }
+        
+        function updateStatsWithFilteredData(filteredData) {
+            const totalDevices = filteredData.reduce((sum, school) => sum + school.devices, 0);
+            const totalStudents = filteredData.reduce((sum, school) => sum + school.students, 0);
+            const overallRatio = totalDevices > 0 ? (totalStudents / totalDevices) : 0;
+            const totalSchools = filteredData.length;
+            
+            document.getElementById('totalDevices').textContent = totalDevices.toLocaleString();
+            document.getElementById('totalStudents').textContent = totalStudents.toLocaleString();
+            document.getElementById('overallRatio').textContent = overallRatio.toFixed(2);
+            document.getElementById('totalSchools').textContent = totalSchools.toLocaleString();
+        }
+
+        function calculateFilteredSchoolData(selectedModels, selectedYears, selectedOSVersions, searchTerm, viewMode) {
+            // Filter devices based on model, manufacturing year, and OS version filters
+            const filteredDevices = deviceLevelData.filter(device => {
+                // Model filter
+                let matchesModel = true;
+                if (selectedModels.length > 0) {
+                    matchesModel = selectedModels.includes(device.model);
+                }
+                
+                // Year filter
+                let matchesYear = true;
+                if (selectedYears.length > 0) {
+                    if (selectedYears.includes('Unknown')) {
+                        matchesYear = selectedYears.includes(device.manufacturingYear) || device.manufacturingYear === 'Unknown';
+                    } else {
+                        matchesYear = selectedYears.includes(device.manufacturingYear);
+                    }
+                }
+                
+                // OS Version filter with grouping support
+                let matchesOSVersion = true;
+                if (selectedOSVersions.length > 0) {
+                    if (selectedOSVersions.includes('Unknown') && device.osVersion === 'Unknown') {
+                        matchesOSVersion = true;
+                    } else {
+                        matchesOSVersion = selectedOSVersions.some(selectedGroup => {
+                            if (selectedGroup === 'Unknown') {
+                                return device.osVersion === 'Unknown';
+                            }
+                            return deviceMatchesOSVersionGroup(device.osVersion, selectedGroup);
+                        });
+                    }
+                }
+                
+                return matchesModel && matchesYear && matchesOSVersion;
+            });
+            
+            // Group filtered devices by school and count them
+            const filteredDeviceCounts = {};
+            const filteredModelCounts = {};
+            const filteredYearCounts = {};
+            const filteredOSVersionCounts = {};
+            
+            filteredDevices.forEach(device => {
+                const school = device.school;
+                
+                // Count devices per school
+                filteredDeviceCounts[school] = (filteredDeviceCounts[school] || 0) + 1;
+                
+                // Track models per school
+                if (!filteredModelCounts[school]) filteredModelCounts[school] = {};
+                filteredModelCounts[school][device.model] = (filteredModelCounts[school][device.model] || 0) + 1;
+                
+                // Track years per school  
+                if (!filteredYearCounts[school]) filteredYearCounts[school] = {};
+                filteredYearCounts[school][device.manufacturingYear] = (filteredYearCounts[school][device.manufacturingYear] || 0) + 1;
+                
+                // Track OS versions per school
+                if (!filteredOSVersionCounts[school]) filteredOSVersionCounts[school] = {};
+                filteredOSVersionCounts[school][device.osVersion] = (filteredOSVersionCounts[school][device.osVersion] || 0) + 1;
+            });
+            
+            // Create new school data with filtered device counts
+            const filteredSchoolData = [];
+            
+            // Get student data from original combinedData
+            const studentsBySchool = {};
+            combinedData.forEach(school => {
+                studentsBySchool[school.school] = school.students;
+            });
+            
+            // Create filtered school entries
+            Object.keys(filteredDeviceCounts).forEach(schoolName => {
+                const deviceCount = filteredDeviceCounts[schoolName];
+                const studentCount = studentsBySchool[schoolName] || 0;
+                const ratio = deviceCount > 0 ? (studentCount / deviceCount) : 0;
+                
+                // Find most common model for this school in filtered data
+                let commonModel = 'Unknown';
+                let maxModelCount = 0;
+                if (filteredModelCounts[schoolName]) {
+                    Object.entries(filteredModelCounts[schoolName]).forEach(([model, count]) => {
+                        if (count > maxModelCount) {
+                            maxModelCount = count;
+                            commonModel = model;
+                        }
+                    });
+                }
+                
+                // Find most common manufacturing year for this school in filtered data
+                let commonYear = 'Unknown';
+                let maxYearCount = 0;
+                if (filteredYearCounts[schoolName]) {
+                    Object.entries(filteredYearCounts[schoolName]).forEach(([year, count]) => {
+                        if (count > maxYearCount) {
+                            maxYearCount = count;
+                            commonYear = year;
+                        }
+                    });
+                }
+                
+                // Find most common OS version for this school in filtered data
+                let commonOSVersion = 'Unknown';
+                let maxOSCount = 0;
+                if (filteredOSVersionCounts[schoolName]) {
+                    Object.entries(filteredOSVersionCounts[schoolName]).forEach(([osVersion, count]) => {
+                        if (count > maxOSCount) {
+                            maxOSCount = count;
+                            commonOSVersion = osVersion;
+                        }
+                    });
+                }
+                
+                filteredSchoolData.push({
+                    school: schoolName,
+                    devices: deviceCount,
+                    students: studentCount,
+                    ratio: ratio,
+                    commonModel: commonModel,
+                    commonManufacturingYear: commonYear,
+                    modelCounts: filteredModelCounts[schoolName] || {},
+                    manufacturingYears: filteredYearCounts[schoolName] || {},
+                    commonOSVersion: commonOSVersion,
+                    osVersions: filteredOSVersionCounts[schoolName] || {}
+                });
+            });
+            
+            // Apply search filter
+            return filteredSchoolData.filter(school => {
+                const matchesSearch = school.school.toLowerCase().includes(searchTerm.toLowerCase());
+                return matchesSearch;
+            });
+        }
+        
+        function updateCharts() {
+            if (combinedData.length === 0) return;
+
+            const chartType = document.getElementById('chartType').value;
+            const viewMode = document.getElementById('viewMode').value;
+            const searchTerm = document.getElementById('searchSchool').value.toLowerCase();
+            const selectedModels = getSelectedCheckboxValues('modelFilterContainer');
+            const selectedYears = getSelectedCheckboxValues('yearFilterContainer');
+            const selectedOSVersions = getSelectedCheckboxValues('osVersionFilterContainer');
+            const sortBy = document.getElementById('sortBy').value;
+
+            // Apply device-level filtering and recalculate school data
+            let filteredData;
+            if (selectedModels.length > 0 || selectedYears.length > 0 || selectedOSVersions.length > 0) {
+                filteredData = calculateFilteredSchoolData(selectedModels, selectedYears, selectedOSVersions, searchTerm, viewMode);
+            } else {
+                // No model/year filters, use original logic
+                filteredData = combinedData.filter(school => {
+                    const matchesSearch = school.school.toLowerCase().includes(searchTerm);
+                    return matchesSearch;
+                });
+            }
+            
+            // Sort data
+            filteredData = sortData(filteredData, sortBy);
+
+            // Update statistics with filtered data
+            updateStatsWithFilteredData(filteredData);
+            
+            // Update main chart
+            updateMainChart(filteredData, chartType, viewMode);
+            
+            // Update ratio chart
+            updateRatioChart(filteredData);
+            
+            // Update models chart
+            updateModelsChart(filteredData, selectedModels);
+            
+            // Update OS version chart
+            updateOSVersionChart(filteredData, selectedOSVersions);
+            
+            // Update data table
+            updateDataTable(filteredData);
+            
+            // Update device table
+            updateDeviceTable(filteredData, selectedModels, selectedYears, selectedOSVersions);
+        }
+
+        function updateMainChart(data, chartType, viewMode) {
+            // Aggressively destroy existing chart
+            if (mainChart) {
+                mainChart.destroy();
+                mainChart = null;
+            }
+
+            // Replace the canvas element entirely to ensure clean slate
+            const oldCanvas = document.getElementById('mainChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'mainChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+            
+            // Get context from new canvas
+            const ctx = newCanvas.getContext('2d');
+            
+            let labels, values, title;
+            
+            switch(viewMode) {
+                case 'devices':
+                    labels = data.map(s => s.school);
+                    values = data.map(s => s.devices);
+                    title = 'Chromebooks per School';
+                    break;
+                case 'students':
+                    labels = data.map(s => s.school);
+                    values = data.map(s => s.students);
+                    title = 'Active Students per School';
+                    break;
+                case 'ratio':
+                    labels = data.map(s => s.school);
+                    values = data.map(s => s.ratio);
+                    title = 'Student-to-Device Ratio';
+                    break;
+            }
+            
+            document.getElementById('mainChartTitle').textContent = title;
+            
+            const colors = generateColors(data.length);
+
+            // Create chart with animation disabled for performance
+            mainChart = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: viewMode === 'ratio' ? 'Students per Device' : 'Count',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(c => c.replace('0.8', '1')),
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    ...getChartOptions(chartType, viewMode),
+                    animation: false, // Disable animations for performance
+                    responsiveAnimationDuration: 0
+                }
+            });
+        }
+
+        function updateRatioChart(data) {
+            // Aggressively destroy existing chart
+            if (ratioChart) {
+                ratioChart.destroy();
+                ratioChart = null;
+            }
+
+            // Replace the canvas element entirely
+            const oldCanvas = document.getElementById('ratioChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'ratioChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+            
+            // Get context from new canvas
+            const ctx = newCanvas.getContext('2d');
+            
+            // Categorize schools by ratio
+            const good = config.ratioThresholds.good;
+            const acceptable = config.ratioThresholds.acceptable;
+            const categories = {
+                [`Good (≤${good})`]: data.filter(s => s.ratio <= good).length,
+                [`Acceptable (${good}-${acceptable})`]: data.filter(s => s.ratio > good && s.ratio <= acceptable).length,
+                [`High (>${acceptable})`]: data.filter(s => s.ratio > acceptable).length
+            };
+
+            ratioChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(categories),
+                    datasets: [{
+                        data: Object.values(categories),
+                        backgroundColor: ['#27ae60', '#f39c12', '#e74c3c'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false, // Disable animations
+                    responsiveAnimationDuration: 0,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateModelsChart(data, selectedModels) {
+            // Aggressively destroy existing chart
+            if (modelsChart) {
+                modelsChart.destroy();
+                modelsChart = null;
+            }
+
+            // Replace the canvas element entirely
+            const oldCanvas = document.getElementById('modelsChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'modelsChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+            
+            // Get context from new canvas
+            const ctx = newCanvas.getContext('2d');
+            
+            // Aggregate model data from all schools in filtered data
+            const modelTotals = {};
+            
+            data.forEach(school => {
+                if (school.modelCounts) {
+                    Object.entries(school.modelCounts).forEach(([model, count]) => {
+                        // If specific models are selected, only show those
+                        if (selectedModels.length === 0 || selectedModels.includes(model)) {
+                            modelTotals[model] = (modelTotals[model] || 0) + count;
+                        }
+                    });
+                }
+            });
+            
+            // If no models are selected, show all models from filtered schools
+            if (selectedModels.length === 0 && Object.keys(modelTotals).length === 0) {
+                data.forEach(school => {
+                    if (school.modelCounts) {
+                        Object.entries(school.modelCounts).forEach(([model, count]) => {
+                            modelTotals[model] = (modelTotals[model] || 0) + count;
+                        });
+                    }
+                });
+            }
+            
+            // Sort models by count (highest first)
+            const sortedModels = Object.entries(modelTotals)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10); // Limit to top 10 models for readability
+            
+            const labels = sortedModels.map(([model]) => model);
+            const values = sortedModels.map(([, count]) => count);
+            const colors = generateColors(labels.length);
+            
+            modelsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 8,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createDeviceLevelData() {
+            deviceLevelData = [];
+            
+            devicesData.forEach(device => {
+                const school = extractSchoolName(device.orgUnitPath);
+                if (!school) return; // Skip excluded organizational units
+                
+                const model = device.model || 'Unknown';
+                const manufacturingYear = device.manufacturingDate ? 
+                    (new Date(device.manufacturingDate).getFullYear() || 'Unknown') : 'Unknown';
+                const lastPolicySync = device.lastPolicySync || 'Unknown';
+                const osVersion = device.osVersion || 'Unknown';
+                
+                // Format last policy sync for display
+                let formattedSync = lastPolicySync;
+                if (lastPolicySync !== 'Unknown') {
+                    try {
+                        const date = new Date(lastPolicySync);
+                        if (!isNaN(date.getTime())) {
+                            formattedSync = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                        }
+                    } catch (e) {
+                        formattedSync = lastPolicySync;
+                    }
+                }
+                
+                deviceLevelData.push({
+                    school: school,
+                    model: model,
+                    manufacturingYear: manufacturingYear.toString(),
+                    lastPolicySync: formattedSync,
+                    originalSync: lastPolicySync, // Keep original for sorting
+                    osVersion: osVersion
+                });
+            });
+            
+            console.log('Device level data created:', deviceLevelData.length, 'devices');
+        }
+
+        function updateDataTable(data) {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+
+            data.forEach(school => {
+                const row = tbody.insertRow();
+                
+                let ratioClass = 'ratio-good';
+                if (school.ratio > config.ratioThresholds.acceptable) ratioClass = 'ratio-critical';
+                else if (school.ratio > config.ratioThresholds.good) ratioClass = 'ratio-warn';
+
+                let status = 'Excellent';
+                if (school.ratio > config.ratioThresholds.acceptable) status = 'Needs Devices';
+                else if (school.ratio > config.ratioThresholds.good) status = 'Adequate';
+                
+                row.innerHTML = `
+                    <td title="${school.school}">${school.school}</td>
+                    <td>${school.devices.toLocaleString()}</td>
+                    <td>${school.students.toLocaleString()}</td>
+                    <td><span class="ratio-indicator ${ratioClass}">${school.ratio.toFixed(2)}</span></td>
+                    <td title="${Object.entries(school.modelCounts || {}).map(([model, count]) => `${model}: ${count} devices`).join('\n')}">${school.commonModel}</td>
+                    <td>${status}</td>
+                `;
+            });
+        }
+        
+        function updateDeviceTable(filteredSchoolData, selectedModels, selectedYears, selectedOSVersions) {
+            const tbody = document.getElementById('deviceTableBody');
+            tbody.innerHTML = '';
+            
+            // Filter device-level data based on current filters
+            const filteredDevices = deviceLevelData.filter(device => {
+                // Check if device's school is in the filtered school data
+                const schoolIncluded = filteredSchoolData.some(school => school.school === device.school);
+                if (!schoolIncluded) return false;
+                
+                // Model filter
+                let matchesModel = true;
+                if (selectedModels.length > 0) {
+                    matchesModel = selectedModels.includes(device.model);
+                }
+                
+                // Year filter
+                let matchesYear = true;
+                if (selectedYears.length > 0) {
+                    if (selectedYears.includes('Unknown')) {
+                        matchesYear = selectedYears.includes(device.manufacturingYear) || device.manufacturingYear === 'Unknown';
+                    } else {
+                        matchesYear = selectedYears.includes(device.manufacturingYear);
+                    }
+                }
+                
+                // OS Version filter with grouping support
+                let matchesOSVersion = true;
+                if (selectedOSVersions.length > 0) {
+                    if (selectedOSVersions.includes('Unknown') && device.osVersion === 'Unknown') {
+                        matchesOSVersion = true;
+                    } else {
+                        matchesOSVersion = selectedOSVersions.some(selectedGroup => {
+                            if (selectedGroup === 'Unknown') {
+                                return device.osVersion === 'Unknown';
+                            }
+                            return deviceMatchesOSVersionGroup(device.osVersion, selectedGroup);
+                        });
+                    }
+                }
+                
+                return matchesModel && matchesYear && matchesOSVersion;
+            });
+            
+            // Sort devices by school, then model
+            filteredDevices.sort((a, b) => {
+                const schoolCompare = a.school.localeCompare(b.school);
+                if (schoolCompare !== 0) return schoolCompare;
+                return a.model.localeCompare(b.model);
+            });
+            
+            // Add rows to table (limit to first 1000 for performance)
+            filteredDevices.slice(0, 1000).forEach(device => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td title="${device.school}">${device.school}</td>
+                    <td title="${device.model}">${device.model}</td>
+                    <td>${device.manufacturingYear}</td>
+                    <td style="font-size: 0.8em;" title="${device.lastPolicySync}">${device.lastPolicySync.length > 25 ? device.lastPolicySync.substring(0, 25) + '...' : device.lastPolicySync}</td>
+                `;
+            });
+            
+            // Show count info if limited
+            if (filteredDevices.length > 1000) {
+                const infoRow = tbody.insertRow();
+                infoRow.innerHTML = `
+                    <td colspan="4" style="text-align: center; font-style: italic; color: #7f8c8d; padding: 10px;">
+                        Showing first 1,000 of ${filteredDevices.length.toLocaleString()} devices. Use filters to narrow results.
+                    </td>
+                `;
+            } else if (filteredDevices.length === 0) {
+                const emptyRow = tbody.insertRow();
+                emptyRow.innerHTML = `
+                    <td colspan="4" style="text-align: center; font-style: italic; color: #7f8c8d; padding: 10px;">
+                        No devices match the current filters.
+                    </td>
+                `;
+            }
+        }
+        
+        function sortDeviceTable(field) {
+            // Simple implementation - could be enhanced with more sophisticated sorting
+            console.log('Sorting device table by:', field);
+            // This would trigger a re-render with different sorting
+            // For now, we'll keep the default sorting by school then model
+        }
+
+        function getChartOptions(chartType, viewMode) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: chartType !== 'bar',
+                        position: 'bottom'
+                    }
+                },
+                scales: chartType === 'bar' ? {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { 
+                            precision: viewMode === 'ratio' ? 2 : 0 
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                } : {}
+            };
+        }
+
+        function generateColors(count) {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                const hue = (i * 360 / count) % 360;
+                colors.push(`hsla(${hue}, 70%, 60%, 0.8)`);
+            }
+            return colors;
+        }
+
+        function updateFileStatus(type, status, message) {
+            const statusElement = document.getElementById(`${type}Status`);
+            const sectionElement = document.getElementById(`${type}Section`);
+            
+            statusElement.textContent = message;
+            statusElement.className = `file-status ${status}`;
+            
+            if (status === 'loaded') {
+                sectionElement.classList.add('loaded');
+            } else {
+                sectionElement.classList.remove('loaded');
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorSection');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('errorSection').classList.add('hidden');
+        }
+        
+        function getSelectedCheckboxValues(containerId) {
+            const container = document.getElementById(containerId);
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+        
+        function createCheckboxFilter(containerId, options, changeHandler) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            options.forEach(option => {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                const span = document.createElement('span');
+                
+                checkbox.type = 'checkbox';
+                checkbox.value = option.value;
+                checkbox.addEventListener('change', changeHandler);
+                
+                span.textContent = option.text;
+                
+                label.appendChild(checkbox);
+                label.appendChild(span);
+                container.appendChild(label);
+            });
+        }
+        
+        function deviceMatchesOSVersionGroup(deviceOSVersion, selectedGroup) {
+            if (!deviceOSVersion || deviceOSVersion === 'Unknown') {
+                return false;
+            }
+            
+            const match = deviceOSVersion.match(/^(\d+)/);
+            if (!match) {
+                return selectedGroup === 'other';
+            }
+            
+            const majorVersion = parseInt(match[1]);
+            
+            switch (selectedGroup) {
+                case '5x':
+                    return majorVersion === 5;
+                case '7x':
+                    return majorVersion === 7;
+                case '12x-13x':
+                    return majorVersion >= 12 && majorVersion <= 13;
+                case 'other':
+                    return true; // Catch-all for versions that don't match expected pattern
+                default:
+                    // Handle individual version groups like '6x', '8x', etc.
+                    const groupMatch = selectedGroup.match(/^(\d+)x$/);
+                    if (groupMatch) {
+                        const groupMajor = parseInt(groupMatch[1]);
+                        return majorVersion === groupMajor;
+                    }
+                    return false;
+            }
+        }
+        
+        function getOSVersionGroup(osVersion) {
+            if (!osVersion || osVersion === 'Unknown') {
+                return 'Unknown';
+            }
+            
+            const match = osVersion.match(/^(\d+)/);
+            if (!match) {
+                return 'other';
+            }
+            
+            const majorVersion = parseInt(match[1]);
+            
+            if (majorVersion === 5) {
+                return '5x';
+            } else if (majorVersion === 7) {
+                return '7x';
+            } else if (majorVersion >= 12 && majorVersion <= 13) {
+                return '12x-13x';
+            } else {
+                return `${majorVersion}x`;
+            }
+        }
+        
+        function getOSVersionGroupLabel(groupKey) {
+            switch (groupKey) {
+                case 'Unknown':
+                    return 'Unknown';
+                case '5x':
+                    return '5x.x (Chrome OS 5x)';
+                case '7x':
+                    return '7x.x (Chrome OS 7x)';
+                case '12x-13x':
+                    return '12x-13x.x (Chrome OS 12x-13x)';
+                case 'other':
+                    return 'Other versions';
+                default:
+                    const match = groupKey.match(/^(\d+)x$/);
+                    if (match) {
+                        const version = match[1];
+                        return `${version}x.x (Chrome OS ${version}x)`;
+                    }
+                    return groupKey;
+            }
+        }
+        
+        function getGroupSortOrder(groupKey) {
+            switch (groupKey) {
+                case 'Unknown':
+                    return -1;
+                case '5x':
+                    return 5;
+                case '7x':
+                    return 7;
+                case '12x-13x':
+                    return 12;
+                case 'other':
+                    return 999;
+                default:
+                    const match = groupKey.match(/^(\d+)x$/);
+                    if (match) {
+                        return parseInt(match[1]);
+                    }
+                    return 1000;
+            }
+        }
+        
+        function populateModelFilter() {
+            const modelSet = new Set();
+            combinedData.forEach(school => {
+                if (school.modelCounts) {
+                    Object.keys(school.modelCounts).forEach(model => {
+                        if (model && model !== 'Unknown') {
+                            modelSet.add(model);
+                        }
+                    });
+                }
+            });
+            
+            // Create checkbox options sorted alphabetically
+            const options = Array.from(modelSet).sort().map(model => ({
+                value: model,
+                text: model
+            }));
+            
+            createCheckboxFilter('modelFilterContainer', options, debouncedUpdateCharts);
+        }
+        
+        function populateYearFilter() {
+            const yearSet = new Set();
+            let hasUnknown = false;
+            
+            combinedData.forEach(school => {
+                if (school.manufacturingYears) {
+                    Object.keys(school.manufacturingYears).forEach(year => {
+                        if (year && year !== 'Unknown') {
+                            yearSet.add(year);
+                        }
+                    });
+                }
+                // Check if this school has devices with unknown manufacturing year
+                if (school.commonManufacturingYear === 'Unknown') {
+                    hasUnknown = true;
+                }
+            });
+            
+            // Create options array
+            const options = [];
+            
+            // Add "Unknown" option first if there are devices with unknown manufacturing dates
+            if (hasUnknown) {
+                options.push({
+                    value: 'Unknown',
+                    text: 'Unknown'
+                });
+            }
+            
+            // Add year options sorted in descending order (newest first)
+            Array.from(yearSet).sort((a, b) => parseInt(b) - parseInt(a)).forEach(year => {
+                options.push({
+                    value: year,
+                    text: year
+                });
+            });
+            
+            createCheckboxFilter('yearFilterContainer', options, debouncedUpdateCharts);
+        }
+        
+        function populateOSVersionFilter() {
+            const osVersionSet = new Set();
+            let hasUnknown = false;
+            
+            combinedData.forEach(school => {
+                if (school.osVersions) {
+                    Object.keys(school.osVersions).forEach(osVersion => {
+                        if (osVersion && osVersion !== 'Unknown') {
+                            osVersionSet.add(osVersion);
+                        }
+                    });
+                }
+                // Check if this school has devices with unknown OS version
+                if (school.commonOSVersion === 'Unknown') {
+                    hasUnknown = true;
+                }
+            });
+            
+            // Group OS versions by major version
+            const versionGroups = new Map();
+            
+            Array.from(osVersionSet).forEach(osVersion => {
+                const match = osVersion.match(/^(\d+)/);
+                if (match) {
+                    const majorVersion = parseInt(match[1]);
+                    let groupKey, groupLabel;
+                    
+                    if (majorVersion >= 5 && majorVersion <= 5) {
+                        groupKey = '5x';
+                        groupLabel = '5x.x (Chrome OS 5x)';
+                    } else if (majorVersion >= 7 && majorVersion <= 7) {
+                        groupKey = '7x';
+                        groupLabel = '7x.x (Chrome OS 7x)';
+                    } else if (majorVersion >= 12 && majorVersion <= 13) {
+                        groupKey = '12x-13x';
+                        groupLabel = '12x-13x.x (Chrome OS 12x-13x)';
+                    } else {
+                        groupKey = `${majorVersion}x`;
+                        groupLabel = `${majorVersion}x.x (Chrome OS ${majorVersion}x)`;
+                    }
+                    
+                    if (!versionGroups.has(groupKey)) {
+                        versionGroups.set(groupKey, {
+                            label: groupLabel,
+                            versions: new Set(),
+                            sortOrder: majorVersion
+                        });
+                    }
+                    versionGroups.get(groupKey).versions.add(osVersion);
+                } else {
+                    // Handle versions that don't match the expected pattern
+                    if (!versionGroups.has('other')) {
+                        versionGroups.set('other', {
+                            label: 'Other versions',
+                            versions: new Set(),
+                            sortOrder: 999
+                        });
+                    }
+                    versionGroups.get('other').versions.add(osVersion);
+                }
+            });
+            
+            // Create options array
+            const options = [];
+            
+            // Add "Unknown" option first if there are devices with unknown OS versions
+            if (hasUnknown) {
+                options.push({
+                    value: 'Unknown',
+                    text: 'Unknown'
+                });
+            }
+            
+            // Sort groups by major version number
+            const sortedGroups = Array.from(versionGroups.entries()).sort((a, b) => {
+                const sortOrderA = a[1].sortOrder;
+                const sortOrderB = b[1].sortOrder;
+                
+                // Special handling for grouped versions
+                if (a[0] === '12x-13x' && b[0] !== '12x-13x') {
+                    return sortOrderA - sortOrderB;
+                }
+                if (b[0] === '12x-13x' && a[0] !== '12x-13x') {
+                    return sortOrderA - sortOrderB;
+                }
+                
+                return sortOrderA - sortOrderB;
+            });
+            
+            // Add grouped version options
+            sortedGroups.forEach(([groupKey, groupInfo]) => {
+                options.push({
+                    value: groupKey,
+                    text: groupInfo.label,
+                    isGroup: true,
+                    versions: Array.from(groupInfo.versions)
+                });
+            });
+            
+            createCheckboxFilter('osVersionFilterContainer', options, debouncedUpdateCharts);
+        }
+        
+        function updateOSVersionChart(data, selectedOSVersions) {
+            // Aggressively destroy existing chart
+            if (osVersionChart) {
+                osVersionChart.destroy();
+                osVersionChart = null;
+            }
+
+            // Replace the canvas element entirely
+            const oldCanvas = document.getElementById('osVersionChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'osVersionChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+            
+            // Get context from new canvas
+            const ctx = newCanvas.getContext('2d');
+            
+            // Aggregate OS version data from all schools in filtered data, grouped by major version
+            const osVersionGroupTotals = {};
+            
+            data.forEach(school => {
+                if (school.osVersions) {
+                    Object.entries(school.osVersions).forEach(([osVersion, count]) => {
+                        // Group the OS version
+                        const group = getOSVersionGroup(osVersion);
+                        
+                        // If specific OS version groups are selected, only show those
+                        if (selectedOSVersions.length === 0 || selectedOSVersions.some(selected => 
+                            selected === group || deviceMatchesOSVersionGroup(osVersion, selected))) {
+                            osVersionGroupTotals[group] = (osVersionGroupTotals[group] || 0) + count;
+                        }
+                    });
+                }
+            });
+            
+            // If no OS versions are selected, show all OS version groups from filtered schools
+            if (selectedOSVersions.length === 0 && Object.keys(osVersionGroupTotals).length === 0) {
+                data.forEach(school => {
+                    if (school.osVersions) {
+                        Object.entries(school.osVersions).forEach(([osVersion, count]) => {
+                            const group = getOSVersionGroup(osVersion);
+                            osVersionGroupTotals[group] = (osVersionGroupTotals[group] || 0) + count;
+                        });
+                    }
+                });
+            }
+            
+            // Sort OS version groups by their numeric order (Unknown first, then by major version)
+            const sortedOSVersionGroups = Object.entries(osVersionGroupTotals)
+                .sort((a, b) => {
+                    const [groupA] = a;
+                    const [groupB] = b;
+                    
+                    // Unknown first
+                    if (groupA === 'Unknown' && groupB !== 'Unknown') return -1;
+                    if (groupB === 'Unknown' && groupA !== 'Unknown') return 1;
+                    if (groupA === 'Unknown' && groupB === 'Unknown') return 0;
+                    
+                    // Extract major version for sorting
+                    const versionA = getGroupSortOrder(groupA);
+                    const versionB = getGroupSortOrder(groupB);
+                    
+                    return versionA - versionB;
+                });
+            
+            const labels = sortedOSVersionGroups.map(([group]) => getOSVersionGroupLabel(group));
+            const values = sortedOSVersionGroups.map(([, count]) => count);
+            const colors = generateColors(labels.length);
+            
+            osVersionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { 
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function sortData(data, sortField) {
+            return data.sort((a, b) => {
+                switch(sortField) {
+                    case 'school':
+                        return a.school.localeCompare(b.school);
+                    case 'devices':
+                        return b.devices - a.devices; // High to low
+                    case 'students':
+                        return b.students - a.students; // High to low
+                    case 'ratio':
+                        return b.ratio - a.ratio; // High to low
+                    case 'commonModel':
+                        return a.commonModel.localeCompare(b.commonModel);
+                    case 'commonManufacturingYear':
+                        // Sort by year, newest first
+                        if (a.commonManufacturingYear === 'Unknown' && b.commonManufacturingYear === 'Unknown') return 0;
+                        if (a.commonManufacturingYear === 'Unknown') return 1;
+                        if (b.commonManufacturingYear === 'Unknown') return -1;
+                        return parseInt(b.commonManufacturingYear) - parseInt(a.commonManufacturingYear);
+                    case 'recentSync':
+                        // Sort by date, newest first
+                        if (a.recentSync === 'Unknown' && b.recentSync === 'Unknown') return 0;
+                        if (a.recentSync === 'Unknown') return 1;
+                        if (b.recentSync === 'Unknown') return -1;
+                        try {
+                            const dateA = new Date(a.recentSync);
+                            const dateB = new Date(b.recentSync);
+                            return dateB - dateA; // Newest first
+                        } catch (e) {
+                            return a.recentSync.localeCompare(b.recentSync);
+                        }
+                    default:
+                        return b.devices - a.devices;
+                }
+            });
+        }
+        
+        function sortTable(field) {
+            if (currentSortField === field) {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortField = field;
+                currentSortOrder = 'desc';
+            }
+            
+            // Update sort dropdown to match
+            const sortSelect = document.getElementById('sortBy');
+            sortSelect.value = field;
+            
+            debouncedUpdateCharts();
+        }
+
+    </script>
+</body>
+</html>
