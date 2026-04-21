@@ -1,19 +1,12 @@
 {
-  "_comment": "Example config for the Chromebook Fleet Ratio Visualizer. Copy this file to data/config.json and adjust the values for your organization. data/ is git-ignored, so your real config never gets committed. The fields below are populated with FSD38 (Foothills School Division) values as a worked example.",
+  "_comment": "Example config for the Chromebook Fleet Ratio Visualizer. Copy this file to data/config.json and adjust the values for your organization. data/ is git-ignored, so your real config never gets committed. All fields are optional; omit any you don't need.",
 
-  "ouPrefix": "/ca/ab/fsd38/FSD/",
+  "ouPrefix": "/your/ou/prefix/",
   "groupingDepth": 1,
 
   "excludedPathPatterns": [
     "/staff",
-    "exam",
-    "maint",
-    "allsites",
-    "cb test container",
-    "administration",
-    "hubathome",
-    "block social networking",
-    "google cast"
+    "exam"
   ],
 
   "ratioThresholds": {
@@ -21,5 +14,5 @@
     "acceptable": 1.5
   },
 
-  "dashboardTitle": "FSD38 Student-to-Chromebook Ratio Visualizer"
+  "dashboardTitle": "Student-to-Chromebook Ratio Visualizer"
 }

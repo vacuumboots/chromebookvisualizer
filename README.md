@@ -2,7 +2,7 @@
 
 A single-file, zero-install HTML tool for visualizing student-to-Chromebook ratios across schools, using the standard user and device CSV exports from the Google Workspace Admin Console.
 
-Originally built for Foothills School Division (FSD38) in Alberta, Canada, but designed to work for any Google Workspace tenant. All organization-specific behavior (OU prefix, excluded OUs, ratio thresholds, dashboard title) is configured through a **Settings** panel in the UI — no code edits required.
+Designed to work for any Google Workspace tenant. All organization-specific behavior (OU prefix, excluded OUs, ratio thresholds, dashboard title) is configured through a **Settings** panel in the UI — no code edits required.
 
 ## What it does
 
@@ -15,7 +15,7 @@ Originally built for Foothills School Division (FSD38) in Alberta, Canada, but d
 
 ## Quick start
 
-1. Open `fleet-ratio-visualizer.html` in any modern browser (double-click the file).
+1. Open `index.html` in any modern browser (double-click the file), or visit the hosted site if deployed to GitHub Pages.
 2. Expand the **Settings** panel and enter values appropriate for your org (see [Configuration](#configuration)).
 3. Export your two CSVs from the Google Workspace Admin Console (see [Exporting your data](#exporting-your-data)).
 4. Upload the devices CSV, then the users CSV.
@@ -29,8 +29,8 @@ The tool exposes a **Settings** panel with the following fields:
 
 | Field | What it does | Example |
 | --- | --- | --- |
-| **OU prefix** | Only rows whose OU path starts with this string are kept. Leave empty to include every OU. | `/ca/ab/fsd38/FSD/` |
-| **Group-name depth after prefix** | How many path segments after the prefix form the "school" label. `1` = first segment; `0` = the full remaining path. | `1` → `FCHS` from `/ca/ab/fsd38/FSD/FCHS/Students` |
+| **OU prefix** | Only rows whose OU path starts with this string are kept. Leave empty to include every OU. | `/your/ou/prefix/` |
+| **Group-name depth after prefix** | How many path segments after the prefix form the "school" label. `1` = first segment; `0` = the full remaining path. | `1` → `NorthHigh` from `/your/ou/prefix/NorthHigh/Students` |
 | **Exclude OU paths containing** | Comma- or newline-separated substrings. Any row whose full OU path contains any of these (case-insensitive) is dropped. Applies to both CSVs. | `/staff, exam, administration, maint` |
 | **Ratio thresholds** | `Good` is the green upper bound; `Acceptable` is the yellow upper bound; anything above is red. | `1.2` / `1.5` |
 | **Dashboard title** | Sets the browser tab title and the page header, for self-branding. | `Acme ISD Chromebook Ratios` |
@@ -43,14 +43,14 @@ At page load, settings are resolved in this order:
 2. **`data/config.json`** — a git-ignored file you can commit to your local filesystem. Auto-loaded via `fetch()` when localStorage is empty. Useful if you want a portable config that doesn't live in a single browser's storage.
 3. **Neutral defaults** — if neither of the above is available.
 
-`example.config.json` is checked into the repo and shows the JSON schema with worked FSD38 values. Copy it to `data/config.json`, adjust for your org, and it will auto-load on next page open.
+`example.config.json` is checked into the repo and documents the JSON schema. Copy it to `data/config.json`, adjust for your org, and it will auto-load on next page open.
 
 ### Working around `file://` fetch restrictions
 
 Most browsers (Chrome, Edge) refuse to `fetch()` a local file from a page opened via `file://`. If auto-load silently does nothing, you have three options:
 
 - Click **Load from file...** in the Settings panel and pick your `data/config.json` (or any valid JSON). This uses the browser's file-picker API, which has no origin restriction.
-- Serve the folder with a tiny local HTTP server, e.g. `python3 -m http.server 8000`, then open `http://localhost:8000/fleet-ratio-visualizer.html`. Auto-fetch works over HTTP.
+- Serve the folder with a tiny local HTTP server, e.g. `python3 -m http.server 8000`, then open `http://localhost:8000/`. Auto-fetch works over HTTP.
 - Just type the values into the Settings panel and click **Save** — the values persist in `localStorage` for that browser.
 
 ### Buttons
@@ -114,8 +114,8 @@ A row is kept only if **all** of the following hold:
 ## Project structure
 
 ```
-fleet-ratio-visualizer.html   The tool. Pure HTML + inline JS + Chart.js.
-example.config.json           Worked example of the Settings-panel config (FSD38 values).
+index.html                    The tool. Pure HTML + inline JS + Chart.js.
+example.config.json           Worked example of the Settings-panel config.
 README.md                     This file.
 .gitignore                    Keeps data/, CLAUDE.md, .claude/ out of git.
 data/                         (Local only, git-ignored.)
