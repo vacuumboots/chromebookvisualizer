@@ -1311,6 +1311,12 @@
             const autoUpdateExpirationIndex = headers.findIndex(header =>
                 header.toLowerCase() === 'autoupdateexpiration'
             );
+            const serialNumberIndex = headers.findIndex(header =>
+                header.toLowerCase() === 'serialnumber'
+            );
+            if (serialNumberIndex === -1) {
+                console.warn('serialNumber column not found in devices CSV');
+            }
             const diskSpaceUsageByteIndex = headers.findIndex(header =>
                 header.toLowerCase() === 'diskspaceusagebyte'
             );
@@ -1377,6 +1383,11 @@
                                 // Add diskSpaceUsageByte if available
                                 if (diskSpaceUsageByteIndex !== -1 && values.length > diskSpaceUsageByteIndex) {
                                     device.diskSpaceUsageByte = values[diskSpaceUsageByteIndex]?.trim() || '';
+                                }
+
+                                // Add serialNumber if available
+                                if (serialNumberIndex !== -1 && values.length > serialNumberIndex) {
+                                    device.serialNumber = values[serialNumberIndex]?.trim() || '';
                                 }
                                 
                                 devicesData.push(device);
