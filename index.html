@@ -6,6 +6,7 @@
     <title>cb-visual — Student-to-Chromebook Ratio Visualizer</title>
     <meta name="description" content="Per-school device distribution and student ratios from your Google Workspace CSV exports.">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
         :root {
             /* Typography */
@@ -573,6 +574,15 @@
             margin-bottom: var(--spacing-sm);
             padding-bottom: var(--spacing-xs);
             border-bottom: 2px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+        .figure__action {
+            margin-left: auto;
+            font-size: var(--font-size-small);
+            padding: 0.2em 0.7em;
+            flex-shrink: 0;
         }
         .figure__num {
             color: var(--color-text-muted);
@@ -664,6 +674,7 @@
             </ol>
         </nav>
         <div class="site-controls">
+            <button type="button" class="btn" id="exportDashboardBtn" onclick="exportDashboardPNG()" aria-label="Export dashboard as PNG" style="display:none;">Export PNG</button>
             <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to light mode">Theme: Dark</button>
             <button type="button" class="font-size-btn" data-font-decrease aria-label="Decrease font size">A&minus;</button>
             <button type="button" class="font-size-btn" data-font-increase aria-label="Increase font size">A+</button>
@@ -789,7 +800,7 @@
                 </div>
             </div>
 
-            <div class="controls">
+            <div class="controls no-export">
                 <div class="controls-row">
                     <div class="control">
                         <label class="control__label" for="chartType">Chart Type</label>
@@ -916,8 +927,9 @@
                 <header class="figure__header">
                     <span class="figure__num">Tab. 02</span>
                     <h3 class="figure__title">Individual Device Details</h3>
+                    <button type="button" class="btn figure__action no-export" onclick="exportDevicesCSV()" title="Export filtered device list as CSV">Export CSV</button>
                 </header>
-                <div class="control" style="margin-bottom: var(--spacing-sm);">
+                <div class="control no-export" style="margin-bottom: var(--spacing-sm);">
                     <label class="control__label" for="searchDevice">Search Devices</label>
                     <input type="text" id="searchDevice" placeholder="Filter by school, model, or serial…" style="width: 100%; max-width: 400px;" />
                 </div>
@@ -1164,6 +1176,7 @@
                 updateStats();
                 updateCharts();
                 document.getElementById('content').classList.remove('hidden');
+                document.getElementById('exportDashboardBtn').style.display = '';
             }
         }
 
@@ -1269,6 +1282,7 @@
                             updateStats();
                             updateCharts();
                             document.getElementById('content').classList.remove('hidden');
+                            document.getElementById('exportDashboardBtn').style.display = '';
                             hideError();
                         }
                         
@@ -2363,6 +2377,7 @@
         // Cache the last-used filter arguments so a header click can re-render
         // without having to re-thread them through from updateCharts.
         let _lastDeviceRenderArgs = null;
+        let _lastFilteredDevices = [];
 
         function compareDevices(a, b, field) {
             switch (field) {
@@ -2461,6 +2476,9 @@
                 if (primary !== 'model') return a.model.localeCompare(b.model);
                 return 0;
             });
+
+            // Persist the sorted, filtered list for CSV export (no cap).
+            _lastFilteredDevices = filteredDevices;
 
             // Add rows (limit to first 1000 for performance)
             filteredDevices.slice(0, 1000).forEach(device => {
@@ -3295,6 +3313,82 @@
             const sortSelect = document.getElementById('sortBy');
             if (sortSelect && sortSelect.value !== field) sortSelect.value = field;
             debouncedUpdateCharts();
+        }
+
+        // --- CSV export (Tab. 02) -----------------------------------------
+        // Exports all currently-filtered devices (no 1 000-row cap) as a
+        // dated CSV file that the user can open in a spreadsheet.
+        function exportDevicesCSV() {
+            if (!_lastFilteredDevices || _lastFilteredDevices.length === 0) {
+                alert('No devices to export. Load data and apply filters first.');
+                return;
+            }
+
+            function esc(val) {
+                const s = (val === null || val === undefined) ? '' : String(val);
+                return (s.includes(',') || s.includes('"') || s.includes('\n'))
+                    ? '"' + s.replace(/"/g, '""') + '"'
+                    : s;
+            }
+
+            const headers = ['School', 'Serial Number', 'Model', 'Mfg. Year',
+                             'Last Policy Sync', 'AutoUpdate Expiration', 'Space Available (GB)'];
+            const rows = _lastFilteredDevices.map(d => [
+                esc(d.school),
+                esc(d.serialNumber || ''),
+                esc(d.model),
+                esc(d.manufacturingYear),
+                esc(d.lastPolicySync),
+                esc(d.autoUpdateExpiration),
+                esc(d.availableSpaceGB !== null && d.availableSpaceGB !== undefined
+                    ? d.availableSpaceGB.toFixed(2) : '')
+            ].join(','));
+
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chromebooks-' + new Date().toISOString().slice(0, 10) + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // --- Dashboard PNG export -----------------------------------------
+        // Uses html2canvas to render the #content area and downloads it as a
+        // PNG. Elements with the 'no-export' class (interactive controls,
+        // export buttons) are excluded from the capture.
+        function exportDashboardPNG() {
+            const target = document.getElementById('content');
+            if (!target) return;
+            const btn = document.getElementById('exportDashboardBtn');
+            const origText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Exporting…'; }
+
+            const bgColor = getComputedStyle(document.documentElement)
+                .getPropertyValue('--color-bg-primary').trim() || '#121212';
+
+            html2canvas(target, {
+                backgroundColor: bgColor,
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                ignoreElements: el => el.classList.contains('no-export')
+            }).then(canvas => {
+                const url = canvas.toDataURL('image/png');
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'chromebook-dashboard-' + new Date().toISOString().slice(0, 10) + '.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }).catch(err => {
+                console.error('Dashboard PNG export failed:', err);
+            }).finally(() => {
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
+            });
         }
 
         // --- Theme toggle (light / dark) ---------------------------------
