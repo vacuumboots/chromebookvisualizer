@@ -86,6 +86,7 @@ Most browsers (Chrome, Edge) refuse to `fetch()` a local file from a page opened
 | `lastPolicySync` | no | case-insensitive name match | recency display |
 | `manufacturingDate` | no | case-insensitive name match | year filter |
 | `osVersion` | no | case-insensitive name match | Chrome OS filter |
+| `autoUpdateExpiration` | no | case-insensitive name match | expiration display & chart |
 
 Column **order** does not matter. Extra columns are ignored.
 

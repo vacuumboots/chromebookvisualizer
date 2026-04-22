@@ -875,6 +875,14 @@
 
             <figure class="figure">
                 <header class="figure__header">
+                    <span class="figure__num">Fig. 05</span>
+                    <h3 class="figure__title">AutoUpdate Expiration Distribution</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="autoUpdateChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
                     <span class="figure__num">Tab. 01</span>
                     <h3 class="figure__title">Detailed School Analysis</h3>
                 </header>
@@ -909,6 +917,7 @@
                                 <th data-field="model" onclick="sortDeviceTable('model')">Model</th>
                                 <th class="num" data-field="manufacturingYear" onclick="sortDeviceTable('manufacturingYear')">Mfg. Year</th>
                                 <th data-field="lastPolicySync" onclick="sortDeviceTable('lastPolicySync')">Last Policy Sync</th>
+                                <th data-field="autoUpdateExpiration" onclick="sortDeviceTable('autoUpdateExpiration')">AutoUpdate Expiration</th>
                             </tr>
                         </thead>
                         <tbody id="deviceTableBody">
@@ -1078,6 +1087,7 @@
         let ratioChart = null;
         let modelsChart = null;
         let osVersionChart = null;
+        let autoUpdateChart = null;
         let updateTimeout = null;
         let currentSortField = 'devices';
         let currentSortOrder = 'desc';
@@ -1278,6 +1288,9 @@
             const osVersionIndex = headers.findIndex(header => 
                 header.toLowerCase() === 'osversion'
             );
+            const autoUpdateExpirationIndex = headers.findIndex(header =>
+                header.toLowerCase() === 'autoupdateexpiration'
+            );
             
             if (orgUnitPathIndex === -1) {
                 throw new Error('orgUnitPath column not found in devices CSV');
@@ -1293,6 +1306,9 @@
             }
             if (osVersionIndex === -1) {
                 console.warn('osVersion column not found in devices CSV');
+            }
+            if (autoUpdateExpirationIndex === -1) {
+                console.warn('autoUpdateExpiration column not found in devices CSV');
             }
 
             devicesData = [];
@@ -1325,6 +1341,11 @@
                                 // Add osVersion if available
                                 if (osVersionIndex !== -1 && values.length > osVersionIndex) {
                                     device.osVersion = values[osVersionIndex]?.trim() || '';
+                                }
+                                
+                                // Add autoUpdateExpiration if available
+                                if (autoUpdateExpirationIndex !== -1 && values.length > autoUpdateExpirationIndex) {
+                                    device.autoUpdateExpiration = values[autoUpdateExpirationIndex]?.trim() || '';
                                 }
                                 
                                 devicesData.push(device);
@@ -1944,6 +1965,9 @@
             // Update OS version chart
             updateOSVersionChart(filteredData, selectedOSVersions);
             
+            // Update AutoUpdate expiration chart
+            updateAutoUpdateChart(filteredData);
+            
             // Update data table
             updateDataTable(filteredData);
             
@@ -2185,6 +2209,14 @@
             });
         }
         
+        // Parse a raw autoUpdateExpiration string (YYYY-MM) into a Date (first day of month)
+        // or null if the value is absent or invalid.
+        function parseAutoUpdateDate(raw) {
+            if (!raw) return null;
+            const d = new Date(raw + '-01');
+            return isNaN(d.getTime()) ? null : d;
+        }
+
         function createDeviceLevelData() {
             deviceLevelData = [];
             
@@ -2197,6 +2229,7 @@
                     (new Date(device.manufacturingDate).getFullYear() || 'Unknown') : 'Unknown';
                 const lastPolicySync = device.lastPolicySync || 'Unknown';
                 const osVersion = device.osVersion || 'Unknown';
+                const rawAutoUpdate = device.autoUpdateExpiration || '';
                 
                 // Format last policy sync for display
                 let formattedSync = lastPolicySync;
@@ -2210,6 +2243,17 @@
                         formattedSync = lastPolicySync;
                     }
                 }
+
+                // Format autoUpdateExpiration (YYYY-MM) for display
+                let formattedAutoUpdate = 'Unknown';
+                if (rawAutoUpdate) {
+                    const aueDate = parseAutoUpdateDate(rawAutoUpdate);
+                    if (aueDate) {
+                        formattedAutoUpdate = aueDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+                    } else {
+                        formattedAutoUpdate = rawAutoUpdate;
+                    }
+                }
                 
                 deviceLevelData.push({
                     school: school,
@@ -2217,7 +2261,9 @@
                     manufacturingYear: manufacturingYear.toString(),
                     lastPolicySync: formattedSync,
                     originalSync: lastPolicySync, // Keep original for sorting
-                    osVersion: osVersion
+                    osVersion: osVersion,
+                    autoUpdateExpiration: formattedAutoUpdate,
+                    originalAutoUpdateExpiration: rawAutoUpdate // YYYY-MM for sorting
                 });
             });
             
@@ -2273,6 +2319,12 @@
                         return isNaN(t) ? -Infinity : t;
                     };
                     return toTs(a.lastPolicySync) - toTs(b.lastPolicySync);
+                }
+                case 'autoUpdateExpiration': {
+                    // originalAutoUpdateExpiration is YYYY-MM; lexicographic sort works.
+                    // Unknown/empty values are given a far-future sentinel so they sort last.
+                    const toAue = v => v || '9999-99';
+                    return toAue(a.originalAutoUpdateExpiration).localeCompare(toAue(b.originalAutoUpdateExpiration));
                 }
                 default: return a.school.localeCompare(b.school);
             }
@@ -2343,20 +2395,21 @@
                     <td title="${device.model}">${device.model}</td>
                     <td class="num">${device.manufacturingYear}</td>
                     <td title="${device.lastPolicySync}">${device.lastPolicySync.length > 25 ? device.lastPolicySync.substring(0, 25) + '…' : device.lastPolicySync}</td>
+                    <td>${device.autoUpdateExpiration}</td>
                 `;
             });
 
             if (filteredDevices.length > 1000) {
                 const infoRow = tbody.insertRow();
                 infoRow.innerHTML = `
-                    <td colspan="4" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
+                    <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
                         Showing first 1,000 of ${filteredDevices.length.toLocaleString()} devices. Use filters to narrow results.
                     </td>
                 `;
             } else if (filteredDevices.length === 0) {
                 const emptyRow = tbody.insertRow();
                 emptyRow.innerHTML = `
-                    <td colspan="4" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
+                    <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
                         No devices match the current filters.
                     </td>
                 `;
@@ -2365,6 +2418,8 @@
 
         function deviceSortDefaultOrder(field) {
             // School + Model are A→Z; year and date are newest-first.
+            // autoUpdateExpiration defaults to ascending (soonest-expiring first).
+            if (field === 'autoUpdateExpiration') return 'asc';
             return (field === 'school' || field === 'model') ? 'asc' : 'desc';
         }
 
@@ -2870,6 +2925,120 @@
                         y: {
                             beginAtZero: true,
                             ticks: { 
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateAutoUpdateChart(filteredSchoolData) {
+            if (autoUpdateChart) {
+                autoUpdateChart.destroy();
+                autoUpdateChart = null;
+            }
+
+            const oldCanvas = document.getElementById('autoUpdateChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'autoUpdateChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Filter device-level data to only devices in the current filtered schools
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const bucketLabels = [
+                'Expired',
+                'Within 30 days',
+                'Within 90 days',
+                'Within 180 days',
+                'Within 1 year',
+                'Over 1 year',
+                'Unknown'
+            ];
+            const bucketColors = [
+                '#ef4444',
+                '#f97316',
+                '#eab308',
+                '#84cc16',
+                '#22c55e',
+                '#15803d',
+                '#6b7280'
+            ];
+            const counts = [0, 0, 0, 0, 0, 0, 0];
+
+            filteredDevices.forEach(device => {
+                if (!device.originalAutoUpdateExpiration) {
+                    counts[6]++; // Unknown
+                    return;
+                }
+                const aueDate = parseAutoUpdateDate(device.originalAutoUpdateExpiration);
+                if (!aueDate) {
+                    counts[6]++; // Unknown
+                    return;
+                }
+                // Use the last day of the expiration month
+                const expiry = new Date(aueDate.getFullYear(), aueDate.getMonth() + 1, 0);
+                const daysUntil = Math.floor((expiry - today) / (1000 * 60 * 60 * 24));
+
+                if (daysUntil < 0)        counts[0]++; // Expired
+                else if (daysUntil <= 30)  counts[1]++; // Within 30 days
+                else if (daysUntil <= 90)  counts[2]++; // Within 90 days
+                else if (daysUntil <= 180) counts[3]++; // Within 180 days
+                else if (daysUntil <= 365) counts[4]++; // Within 1 year
+                else                       counts[5]++; // Over 1 year
+            });
+
+            autoUpdateChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bucketLabels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: bucketColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
                                 precision: 0
                             }
                         },
