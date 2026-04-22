@@ -883,6 +883,14 @@
 
             <figure class="figure">
                 <header class="figure__header">
+                    <span class="figure__num">Fig. 06</span>
+                    <h3 class="figure__title">Available Disk Space Distribution</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="diskSpaceChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
                     <span class="figure__num">Tab. 01</span>
                     <h3 class="figure__title">Detailed School Analysis</h3>
                 </header>
@@ -918,6 +926,7 @@
                                 <th class="num" data-field="manufacturingYear" onclick="sortDeviceTable('manufacturingYear')">Mfg. Year</th>
                                 <th data-field="lastPolicySync" onclick="sortDeviceTable('lastPolicySync')">Last Policy Sync</th>
                                 <th data-field="autoUpdateExpiration" onclick="sortDeviceTable('autoUpdateExpiration')">AutoUpdate Expiration</th>
+                                <th class="num" data-field="availableSpaceGB" onclick="sortDeviceTable('availableSpaceGB')">Space Available</th>
                             </tr>
                         </thead>
                         <tbody id="deviceTableBody">
@@ -1088,6 +1097,7 @@
         let modelsChart = null;
         let osVersionChart = null;
         let autoUpdateChart = null;
+        let diskSpaceChart = null;
         let updateTimeout = null;
         let currentSortField = 'devices';
         let currentSortOrder = 'desc';
@@ -1291,7 +1301,13 @@
             const autoUpdateExpirationIndex = headers.findIndex(header =>
                 header.toLowerCase() === 'autoupdateexpiration'
             );
-            
+            const diskSpaceUsageByteIndex = headers.findIndex(header =>
+                header.toLowerCase() === 'diskspaceusagebyte'
+            );
+            if (diskSpaceUsageByteIndex === -1) {
+                console.warn('diskSpaceUsageByte column not found in devices CSV');
+            }
+
             if (orgUnitPathIndex === -1) {
                 throw new Error('orgUnitPath column not found in devices CSV');
             }
@@ -1346,6 +1362,11 @@
                                 // Add autoUpdateExpiration if available
                                 if (autoUpdateExpirationIndex !== -1 && values.length > autoUpdateExpirationIndex) {
                                     device.autoUpdateExpiration = values[autoUpdateExpirationIndex]?.trim() || '';
+                                }
+
+                                // Add diskSpaceUsageByte if available
+                                if (diskSpaceUsageByteIndex !== -1 && values.length > diskSpaceUsageByteIndex) {
+                                    device.diskSpaceUsageByte = values[diskSpaceUsageByteIndex]?.trim() || '';
                                 }
                                 
                                 devicesData.push(device);
@@ -1968,6 +1989,9 @@
             // Update AutoUpdate expiration chart
             updateAutoUpdateChart(filteredData);
             
+            // Update disk space chart
+            updateDiskSpaceChart(filteredData);
+            
             // Update data table
             updateDataTable(filteredData);
             
@@ -2254,6 +2278,19 @@
                         formattedAutoUpdate = rawAutoUpdate;
                     }
                 }
+
+                // Calculate available disk space in GB from "used / total" bytes format
+                let availableSpaceGB = null;
+                if (device.diskSpaceUsageByte) {
+                    const parts = device.diskSpaceUsageByte.split('/');
+                    if (parts.length === 2) {
+                        const used = parseFloat(parts[0].trim());
+                        const total = parseFloat(parts[1].trim());
+                        if (!isNaN(used) && !isNaN(total) && total > 0) {
+                            availableSpaceGB = (total - used) / 1e9;
+                        }
+                    }
+                }
                 
                 deviceLevelData.push({
                     school: school,
@@ -2263,7 +2300,8 @@
                     originalSync: lastPolicySync, // Keep original for sorting
                     osVersion: osVersion,
                     autoUpdateExpiration: formattedAutoUpdate,
-                    originalAutoUpdateExpiration: rawAutoUpdate // YYYY-MM for sorting
+                    originalAutoUpdateExpiration: rawAutoUpdate, // YYYY-MM for sorting
+                    availableSpaceGB: availableSpaceGB
                 });
             });
             
@@ -2325,6 +2363,11 @@
                     // Unknown/empty values are given a far-future sentinel so they sort last.
                     const toAue = v => v || '9999-99';
                     return toAue(a.originalAutoUpdateExpiration).localeCompare(toAue(b.originalAutoUpdateExpiration));
+                }
+                case 'availableSpaceGB': {
+                    // null (unknown) values sort last
+                    const toSpace = v => (v === null || v === undefined) ? Infinity : v;
+                    return toSpace(a.availableSpaceGB) - toSpace(b.availableSpaceGB);
                 }
                 default: return a.school.localeCompare(b.school);
             }
@@ -2390,26 +2433,30 @@
             // Add rows (limit to first 1000 for performance)
             filteredDevices.slice(0, 1000).forEach(device => {
                 const row = tbody.insertRow();
+                const spaceDisplay = device.availableSpaceGB !== null && device.availableSpaceGB !== undefined
+                    ? device.availableSpaceGB.toFixed(2) + ' GB'
+                    : '—';
                 row.innerHTML = `
                     <td class="school" title="${device.school}">${device.school}</td>
                     <td title="${device.model}">${device.model}</td>
                     <td class="num">${device.manufacturingYear}</td>
                     <td title="${device.lastPolicySync}">${device.lastPolicySync.length > 25 ? device.lastPolicySync.substring(0, 25) + '…' : device.lastPolicySync}</td>
                     <td>${device.autoUpdateExpiration}</td>
+                    <td class="num">${spaceDisplay}</td>
                 `;
             });
 
             if (filteredDevices.length > 1000) {
                 const infoRow = tbody.insertRow();
                 infoRow.innerHTML = `
-                    <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
+                    <td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
                         Showing first 1,000 of ${filteredDevices.length.toLocaleString()} devices. Use filters to narrow results.
                     </td>
                 `;
             } else if (filteredDevices.length === 0) {
                 const emptyRow = tbody.insertRow();
                 emptyRow.innerHTML = `
-                    <td colspan="5" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
+                    <td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
                         No devices match the current filters.
                     </td>
                 `;
@@ -2419,7 +2466,8 @@
         function deviceSortDefaultOrder(field) {
             // School + Model are A→Z; year and date are newest-first.
             // autoUpdateExpiration defaults to ascending (soonest-expiring first).
-            if (field === 'autoUpdateExpiration') return 'asc';
+            // availableSpaceGB defaults to ascending (least space first — needs powerwash).
+            if (field === 'autoUpdateExpiration' || field === 'availableSpaceGB') return 'asc';
             return (field === 'school' || field === 'model') ? 'asc' : 'desc';
         }
 
@@ -3053,6 +3101,100 @@
             });
         }
         
+        function updateDiskSpaceChart(filteredSchoolData) {
+            if (diskSpaceChart) {
+                diskSpaceChart.destroy();
+                diskSpaceChart = null;
+            }
+
+            const oldCanvas = document.getElementById('diskSpaceChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'diskSpaceChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            // Filter device-level data to only devices in the current filtered schools
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const bucketLabels = [
+                '< 1 GB available',
+                '1 – 3 GB available',
+                '> 3 GB available',
+                'Unknown'
+            ];
+            const bucketColors = [
+                '#ef4444',
+                '#eab308',
+                '#22c55e',
+                '#6b7280'
+            ];
+            const counts = [0, 0, 0, 0];
+
+            filteredDevices.forEach(device => {
+                if (device.availableSpaceGB === null || device.availableSpaceGB === undefined) {
+                    counts[3]++; // Unknown
+                } else if (device.availableSpaceGB < 1) {
+                    counts[0]++; // < 1 GB
+                } else if (device.availableSpaceGB <= 3) {
+                    counts[1]++; // 1–3 GB
+                } else {
+                    counts[2]++; // > 3 GB
+                }
+            });
+
+            diskSpaceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bucketLabels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: bucketColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         // Natural direction for each sort field — used when the field is first
         // selected (via dropdown or a fresh column click). Clicking the same
         // column twice toggles from here.

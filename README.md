@@ -87,6 +87,7 @@ Most browsers (Chrome, Edge) refuse to `fetch()` a local file from a page opened
 | `manufacturingDate` | no | case-insensitive name match | year filter |
 | `osVersion` | no | case-insensitive name match | Chrome OS filter |
 | `autoUpdateExpiration` | no | case-insensitive name match | expiration display & chart |
+| `diskSpaceUsageByte` | no | case-insensitive name match | available space column & chart (format: `used / total` bytes) |
 
 Column **order** does not matter. Extra columns are ignored.
 
