@@ -917,11 +917,16 @@
                     <span class="figure__num">Tab. 02</span>
                     <h3 class="figure__title">Individual Device Details</h3>
                 </header>
+                <div class="control" style="margin-bottom: var(--spacing-sm);">
+                    <label class="control__label" for="searchDevice">Search Devices</label>
+                    <input type="text" id="searchDevice" placeholder="Filter by school, model, or serial…" style="width: 100%; max-width: 400px;" />
+                </div>
                 <div style="max-height: 600px; overflow-y: auto;">
                     <table class="data-table" id="deviceTable">
                         <thead>
                             <tr>
                                 <th data-field="school" onclick="sortDeviceTable('school')">School</th>
+                                <th data-field="serialNumber" onclick="sortDeviceTable('serialNumber')">Serial Number</th>
                                 <th data-field="model" onclick="sortDeviceTable('model')">Model</th>
                                 <th class="num" data-field="manufacturingYear" onclick="sortDeviceTable('manufacturingYear')">Mfg. Year</th>
                                 <th data-field="lastPolicySync" onclick="sortDeviceTable('lastPolicySync')">Last Policy Sync</th>
@@ -1110,6 +1115,11 @@
         document.getElementById('chartType').addEventListener('change', debouncedUpdateCharts);
         document.getElementById('viewMode').addEventListener('change', debouncedUpdateCharts);
         document.getElementById('searchSchool').addEventListener('input', debouncedUpdateCharts);
+        document.getElementById('searchDevice').addEventListener('input', () => {
+            if (_lastDeviceRenderArgs) {
+                updateDeviceTable(..._lastDeviceRenderArgs);
+            }
+        });
         // Event listeners for checkbox filters will be added dynamically
         document.getElementById('sortBy').addEventListener('change', (e) => {
             currentSortField = e.target.value;
@@ -2294,6 +2304,7 @@
                 
                 deviceLevelData.push({
                     school: school,
+                    serialNumber: device.serialNumber || '',
                     model: model,
                     manufacturingYear: manufacturingYear.toString(),
                     lastPolicySync: formattedSync,
@@ -2345,6 +2356,7 @@
         function compareDevices(a, b, field) {
             switch (field) {
                 case 'school': return a.school.localeCompare(b.school);
+                case 'serialNumber': return (a.serialNumber || '').localeCompare(b.serialNumber || '');
                 case 'model':  return a.model.localeCompare(b.model);
                 case 'manufacturingYear': {
                     const toNum = v => (!v || v === 'Unknown') ? -Infinity : parseInt(v, 10);
@@ -2379,6 +2391,8 @@
             tbody.innerHTML = '';
             updateSortIndicators('deviceTable', currentDeviceSortField, currentDeviceSortOrder);
 
+            const deviceSearchTerm = (document.getElementById('searchDevice')?.value || '').toLowerCase().trim();
+
             // Filter device-level data based on current filters
             const filteredDevices = deviceLevelData.filter(device => {
                 const schoolIncluded = filteredSchoolData.some(school => school.school === device.school);
@@ -2412,7 +2426,14 @@
                     }
                 }
 
-                return matchesModel && matchesYear && matchesOSVersion;
+                let matchesDeviceSearch = true;
+                if (deviceSearchTerm) {
+                    matchesDeviceSearch = device.school.toLowerCase().includes(deviceSearchTerm) ||
+                        device.model.toLowerCase().includes(deviceSearchTerm) ||
+                        (device.serialNumber || '').toLowerCase().includes(deviceSearchTerm);
+                }
+
+                return matchesModel && matchesYear && matchesOSVersion && matchesDeviceSearch;
             });
 
             // Primary sort by current field/direction; fall back to school then
@@ -2438,6 +2459,7 @@
                     : '—';
                 row.innerHTML = `
                     <td class="school" title="${device.school}">${device.school}</td>
+                    <td title="${device.serialNumber || ''}">${device.serialNumber || '—'}</td>
                     <td title="${device.model}">${device.model}</td>
                     <td class="num">${device.manufacturingYear}</td>
                     <td title="${device.lastPolicySync}">${device.lastPolicySync.length > 25 ? device.lastPolicySync.substring(0, 25) + '…' : device.lastPolicySync}</td>
@@ -2449,14 +2471,14 @@
             if (filteredDevices.length > 1000) {
                 const infoRow = tbody.insertRow();
                 infoRow.innerHTML = `
-                    <td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
+                    <td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
                         Showing first 1,000 of ${filteredDevices.length.toLocaleString()} devices. Use filters to narrow results.
                     </td>
                 `;
             } else if (filteredDevices.length === 0) {
                 const emptyRow = tbody.insertRow();
                 emptyRow.innerHTML = `
-                    <td colspan="6" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
+                    <td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-sm);">
                         No devices match the current filters.
                     </td>
                 `;
@@ -2464,11 +2486,11 @@
         }
 
         function deviceSortDefaultOrder(field) {
-            // School + Model are A→Z; year and date are newest-first.
+            // School + Model + Serial are A→Z; year and date are newest-first.
             // autoUpdateExpiration defaults to ascending (soonest-expiring first).
             // availableSpaceGB defaults to ascending (least space first — needs powerwash).
             if (field === 'autoUpdateExpiration' || field === 'availableSpaceGB') return 'asc';
-            return (field === 'school' || field === 'model') ? 'asc' : 'desc';
+            return (field === 'school' || field === 'model' || field === 'serialNumber') ? 'asc' : 'desc';
         }
 
         function sortDeviceTable(field) {
