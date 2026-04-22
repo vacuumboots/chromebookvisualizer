@@ -82,6 +82,7 @@ Most browsers (Chrome, Edge) refuse to `fetch()` a local file from a page opened
 | Column | Required? | How it's located | Use |
 | --- | --- | --- | --- |
 | `orgUnitPath` | yes | case-insensitive name match | group by school |
+| `serialNumber` | no | case-insensitive name match | serial number column in Tab. 02 & search filter |
 | `model` | no | case-insensitive name match | model filter |
 | `lastPolicySync` | no | case-insensitive name match | recency display |
 | `manufacturingDate` | no | case-insensitive name match | year filter |
