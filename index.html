@@ -2366,7 +2366,7 @@
                 }
                 case 'availableSpaceGB': {
                     // null (unknown) values sort last
-                    const toSpace = v => (v === null || v === undefined) ? -Infinity : v;
+                    const toSpace = v => (v === null || v === undefined) ? Infinity : v;
                     return toSpace(a.availableSpaceGB) - toSpace(b.availableSpaceGB);
                 }
                 default: return a.school.localeCompare(b.school);
@@ -3194,6 +3194,8 @@
                 }
             });
         }
+
+        // Natural direction for each sort field — used when the field is first
         // selected (via dropdown or a fresh column click). Clicking the same
         // column twice toggles from here.
         function defaultOrderFor(field) {
