@@ -2044,16 +2044,16 @@
             };
 
             const rt = chartTheme();
-            const good = `color-mix(in srgb, ${rt.muted} 75%, transparent)`;
-            const warn = `color-mix(in srgb, ${rt.text} 55%, transparent)`;
-            const crit = rt.text;
+            const colorGood = `color-mix(in srgb, ${rt.muted} 75%, transparent)`;
+            const colorWarn = `color-mix(in srgb, ${rt.text} 55%, transparent)`;
+            const colorCrit = rt.text;
             ratioChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: Object.keys(categories),
                     datasets: [{
                         data: Object.values(categories),
-                        backgroundColor: [good, warn, crit],
+                        backgroundColor: [colorGood, colorWarn, colorCrit],
                         borderColor: rt.bgSecondary,
                         borderWidth: 2
                     }]
