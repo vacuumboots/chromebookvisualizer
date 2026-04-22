@@ -674,7 +674,7 @@
             </ol>
         </nav>
         <div class="site-controls">
-            <button type="button" class="btn" id="exportDashboardBtn" onclick="exportDashboardPNG()" aria-label="Export dashboard as PNG" style="display:none;">Export PNG</button>
+            <button type="button" class="btn hidden" id="exportDashboardBtn" onclick="exportDashboardPNG()" aria-label="Export dashboard as PNG">Export PNG</button>
             <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to light mode">Theme: Dark</button>
             <button type="button" class="font-size-btn" data-font-decrease aria-label="Decrease font size">A&minus;</button>
             <button type="button" class="font-size-btn" data-font-increase aria-label="Increase font size">A+</button>
@@ -1176,7 +1176,7 @@
                 updateStats();
                 updateCharts();
                 document.getElementById('content').classList.remove('hidden');
-                document.getElementById('exportDashboardBtn').style.display = '';
+                document.getElementById('exportDashboardBtn').classList.remove('hidden');
             }
         }
 
@@ -1282,7 +1282,7 @@
                             updateStats();
                             updateCharts();
                             document.getElementById('content').classList.remove('hidden');
-                            document.getElementById('exportDashboardBtn').style.display = '';
+                            document.getElementById('exportDashboardBtn').classList.remove('hidden');
                             hideError();
                         }
                         
@@ -3324,7 +3324,7 @@
                 return;
             }
 
-            function esc(val) {
+            function escapeCSVField(val) {
                 const s = (val === null || val === undefined) ? '' : String(val);
                 return (s.includes(',') || s.includes('"') || s.includes('\n'))
                     ? '"' + s.replace(/"/g, '""') + '"'
@@ -3334,13 +3334,13 @@
             const headers = ['School', 'Serial Number', 'Model', 'Mfg. Year',
                              'Last Policy Sync', 'AutoUpdate Expiration', 'Space Available (GB)'];
             const rows = _lastFilteredDevices.map(d => [
-                esc(d.school),
-                esc(d.serialNumber || ''),
-                esc(d.model),
-                esc(d.manufacturingYear),
-                esc(d.lastPolicySync),
-                esc(d.autoUpdateExpiration),
-                esc(d.availableSpaceGB !== null && d.availableSpaceGB !== undefined
+                escapeCSVField(d.school),
+                escapeCSVField(d.serialNumber || ''),
+                escapeCSVField(d.model),
+                escapeCSVField(d.manufacturingYear),
+                escapeCSVField(d.lastPolicySync),
+                escapeCSVField(d.autoUpdateExpiration),
+                escapeCSVField(d.availableSpaceGB !== null && d.availableSpaceGB !== undefined
                     ? d.availableSpaceGB.toFixed(2) : '')
             ].join(','));
 
