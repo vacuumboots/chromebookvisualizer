@@ -662,6 +662,101 @@
 
         /* ---- Utility ------------------------------------------------- */
         .hidden { display: none; }
+
+        /* ---- Print / PDF export -------------------------------------- */
+        @media print {
+            @page { margin: 1.5cm; }
+
+            html { font-size: 10pt; }
+
+            body {
+                background: #fff !important;
+                color: #000 !important;
+            }
+
+            .skip-link,
+            header,
+            footer,
+            .site-controls,
+            .uploads,
+            .settings,
+            .controls-row,
+            .control,
+            .no-export,
+            .figure__action,
+            #searchDevice,
+            .page-lede {
+                display: none !important;
+            }
+
+            #content.hidden { display: block !important; }
+
+            main { max-width: 100% !important; padding: 0 !important; }
+
+            .page-heading {
+                font-size: 1.4rem;
+                margin-bottom: 0.5rem;
+                color: #000 !important;
+            }
+
+            .stats {
+                display: flex;
+                gap: 1.5rem;
+                margin-bottom: 1.5rem;
+                page-break-inside: avoid;
+            }
+            .stat {
+                background: #f5f5f5 !important;
+                border: 1px solid #ddd;
+                color: #000 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .stat__label { color: #555 !important; }
+            .stat__figure { color: #000 !important; }
+
+            .figure {
+                background: #fff !important;
+                border: 1px solid #ddd;
+                margin-bottom: 1.5rem;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .figure__header {
+                border-bottom: 1px solid #ddd;
+                background: #f5f5f5 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .figure__num { color: #666 !important; }
+            .figure__title { color: #000 !important; }
+            .figure__chart-wrap {
+                max-height: 280px !important;
+                height: 280px !important;
+            }
+
+            .data-table {
+                font-size: 9pt;
+            }
+            .data-table th {
+                background: #f5f5f5 !important;
+                color: #000 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .data-table td {
+                color: #000 !important;
+                border-bottom: 1px solid #ddd;
+            }
+
+            /* Force page breaks before major chart sections */
+            .figure:nth-of-type(3),
+            .figure:nth-of-type(5),
+            .figure:nth-of-type(7) {
+                break-before: page;
+                page-break-before: always;
+            }
+        }
     </style>
 </head>
 <body>
@@ -675,6 +770,7 @@
         </nav>
         <div class="site-controls">
             <button type="button" class="btn hidden" id="exportDashboardBtn" onclick="exportDashboardPNG()" aria-label="Export dashboard as PNG">Export PNG</button>
+            <button type="button" class="btn hidden" id="exportPdfBtn" onclick="exportDashboardPDF()" aria-label="Save dashboard as PDF">Save as PDF</button>
             <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to light mode">Theme: Dark</button>
             <button type="button" class="font-size-btn" data-font-decrease aria-label="Decrease font size">A&minus;</button>
             <button type="button" class="font-size-btn" data-font-increase aria-label="Increase font size">A+</button>
@@ -849,6 +945,10 @@
                         <label class="control__label">Filter · OS Version</label>
                         <div class="checkbox-filter" id="osVersionFilterContainer"></div>
                     </div>
+                    <div class="control">
+                        <label class="control__label">Filter · Disk Space</label>
+                        <div class="checkbox-filter" id="diskSpaceFilterContainer"></div>
+                    </div>
                 </div>
             </div>
 
@@ -890,6 +990,14 @@
                     <h3 class="figure__title">AutoUpdate Expiration Distribution</h3>
                 </header>
                 <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="autoUpdateChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
+                    <span class="figure__num">Fig. 05b</span>
+                    <h3 class="figure__title">AutoUpdate Expiration by Year</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="autoUpdateYearChart"></canvas></div>
             </figure>
 
             <figure class="figure">
@@ -1114,6 +1222,7 @@
         let modelsChart = null;
         let osVersionChart = null;
         let autoUpdateChart = null;
+        let autoUpdateYearChart = null;
         let diskSpaceChart = null;
         let updateTimeout = null;
         let currentSortField = 'devices';
@@ -1177,6 +1286,7 @@
                 updateCharts();
                 document.getElementById('content').classList.remove('hidden');
                 document.getElementById('exportDashboardBtn').classList.remove('hidden');
+                document.getElementById('exportPdfBtn').classList.remove('hidden');
             }
         }
 
@@ -1283,6 +1393,7 @@
                             updateCharts();
                             document.getElementById('content').classList.remove('hidden');
                             document.getElementById('exportDashboardBtn').classList.remove('hidden');
+                            document.getElementById('exportPdfBtn').classList.remove('hidden');
                             hideError();
                         }
                         
@@ -1785,6 +1896,7 @@
             populateModelFilter();
             populateYearFilter();
             populateOSVersionFilter();
+            populateDiskSpaceFilter();
         }
 
         function extractSchoolName(orgPath) {
@@ -1846,8 +1958,8 @@
             renderStats(totalDevices, totalStudents, overallRatio, totalSchools);
         }
 
-        function calculateFilteredSchoolData(selectedModels, selectedYears, selectedOSVersions, searchTerm, viewMode) {
-            // Filter devices based on model, manufacturing year, and OS version filters
+        function calculateFilteredSchoolData(selectedModels, selectedYears, selectedOSVersions, selectedDiskSpace, searchTerm, viewMode) {
+            // Filter devices based on model, manufacturing year, OS version, and disk space filters
             const filteredDevices = deviceLevelData.filter(device => {
                 // Model filter
                 let matchesModel = true;
@@ -1879,8 +1991,14 @@
                         });
                     }
                 }
+
+                // Disk space filter
+                let matchesDiskSpace = true;
+                if (selectedDiskSpace.length > 0) {
+                    matchesDiskSpace = selectedDiskSpace.includes(getDiskSpaceBucket(device));
+                }
                 
-                return matchesModel && matchesYear && matchesOSVersion;
+                return matchesModel && matchesYear && matchesOSVersion && matchesDiskSpace;
             });
             
             // Group filtered devices by school and count them
@@ -1989,14 +2107,15 @@
             const selectedModels = getSelectedCheckboxValues('modelFilterContainer');
             const selectedYears = getSelectedCheckboxValues('yearFilterContainer');
             const selectedOSVersions = getSelectedCheckboxValues('osVersionFilterContainer');
+            const selectedDiskSpace = getSelectedCheckboxValues('diskSpaceFilterContainer');
             const sortBy = document.getElementById('sortBy').value;
 
             // Apply device-level filtering and recalculate school data
             let filteredData;
-            if (selectedModels.length > 0 || selectedYears.length > 0 || selectedOSVersions.length > 0) {
-                filteredData = calculateFilteredSchoolData(selectedModels, selectedYears, selectedOSVersions, searchTerm, viewMode);
+            if (selectedModels.length > 0 || selectedYears.length > 0 || selectedOSVersions.length > 0 || selectedDiskSpace.length > 0) {
+                filteredData = calculateFilteredSchoolData(selectedModels, selectedYears, selectedOSVersions, selectedDiskSpace, searchTerm, viewMode);
             } else {
-                // No model/year filters, use original logic
+                // No device-level filters, use original logic
                 filteredData = combinedData.filter(school => {
                     const matchesSearch = school.school.toLowerCase().includes(searchTerm);
                     return matchesSearch;
@@ -2023,15 +2142,18 @@
             
             // Update AutoUpdate expiration chart
             updateAutoUpdateChart(filteredData);
-            
+
+            // Update AutoUpdate expiration by year chart
+            updateAutoUpdateYearChart(filteredData);
+
             // Update disk space chart
-            updateDiskSpaceChart(filteredData);
+            updateDiskSpaceChart(filteredData, selectedDiskSpace);
             
             // Update data table
             updateDataTable(filteredData);
             
             // Update device table
-            updateDeviceTable(filteredData, selectedModels, selectedYears, selectedOSVersions);
+            updateDeviceTable(filteredData, selectedModels, selectedYears, selectedOSVersions, selectedDiskSpace);
         }
 
         function updateMainChart(data, chartType, viewMode) {
@@ -2074,10 +2196,7 @@
             document.getElementById('mainChartTitle').textContent = title;
             
             const theme = chartTheme();
-            const barFill = `color-mix(in srgb, ${theme.text} 78%, transparent)`;
-            const colors = chartType === 'bar'
-                ? Array(data.length).fill(barFill)
-                : generateColors(data.length);
+            const colors = generateColors(data.length);
 
             mainChart = new Chart(ctx, {
                 type: chartType,
@@ -2089,7 +2208,7 @@
                         backgroundColor: colors,
                         borderColor: chartType === 'bar' ? theme.bgSecondary : colors,
                         borderWidth: chartType === 'bar' ? 0 : 1,
-                        hoverBackgroundColor: chartType === 'bar' ? theme.text : colors
+                        hoverBackgroundColor: colors
                     }]
                 },
                 options: {
@@ -2127,9 +2246,9 @@
             };
 
             const rt = chartTheme();
-            const colorGood = `color-mix(in srgb, ${rt.muted} 75%, transparent)`;
-            const colorWarn = `color-mix(in srgb, ${rt.text} 55%, transparent)`;
-            const colorCrit = rt.text;
+            const colorGood = '#22c55e';
+            const colorWarn = '#facc15';
+            const colorCrit = '#ef4444';
             ratioChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
@@ -2411,8 +2530,8 @@
             }
         }
 
-        function updateDeviceTable(filteredSchoolData, selectedModels, selectedYears, selectedOSVersions) {
-            _lastDeviceRenderArgs = [filteredSchoolData, selectedModels, selectedYears, selectedOSVersions];
+        function updateDeviceTable(filteredSchoolData, selectedModels, selectedYears, selectedOSVersions, selectedDiskSpace) {
+            _lastDeviceRenderArgs = [filteredSchoolData, selectedModels, selectedYears, selectedOSVersions, selectedDiskSpace];
             const tbody = document.getElementById('deviceTableBody');
             tbody.innerHTML = '';
             updateSortIndicators('deviceTable', currentDeviceSortField, currentDeviceSortOrder);
@@ -2452,6 +2571,11 @@
                     }
                 }
 
+                let matchesDiskSpace = true;
+                if (selectedDiskSpace.length > 0) {
+                    matchesDiskSpace = selectedDiskSpace.includes(getDiskSpaceBucket(device));
+                }
+
                 let matchesDeviceSearch = true;
                 if (deviceSearchTerm) {
                     matchesDeviceSearch = device.school.toLowerCase().includes(deviceSearchTerm) ||
@@ -2459,7 +2583,7 @@
                         (device.serialNumber || '').toLowerCase().includes(deviceSearchTerm);
                 }
 
-                return matchesModel && matchesYear && matchesOSVersion && matchesDeviceSearch;
+                return matchesModel && matchesYear && matchesOSVersion && matchesDiskSpace && matchesDeviceSearch;
             });
 
             // Primary sort by current field/direction; fall back to school then
@@ -2593,18 +2717,18 @@
         }
 
         function generateColors(count) {
-            // Monochromatic palette derived from current theme. Stepped
-            // opacities of the primary text color so pie/doughnut slices read
-            // as value-ladder, not a rainbow.
-            const text = chartTheme().text;
-            // Convert hsl() string to its h/s parts so we can vary lightness.
-            const palette = [];
-            const stops = [0.90, 0.65, 0.45, 0.30, 0.78, 0.55, 0.38, 0.22];
+            // Distinct vibrant palette that works in both light and dark themes.
+            const palette = [
+                '#0ea5e9', '#22d3ee', '#2dd4bf', '#34d399', '#a3e635',
+                '#facc15', '#fb923c', '#f87171', '#c084fc', '#e879f9',
+                '#38bdf8', '#818cf8', '#f472b6', '#a78bfa', '#fbbf24',
+                '#4ade80', '#60a5fa', '#a8a29e', '#f87171', '#fb923c'
+            ];
+            const colors = [];
             for (let i = 0; i < count; i++) {
-                const alpha = stops[i % stops.length];
-                palette.push(`color-mix(in srgb, ${text} ${Math.round(alpha * 100)}%, transparent)`);
+                colors.push(palette[i % palette.length]);
             }
-            return palette;
+            return colors;
         }
 
         function updateFileStatus(type, status, message) {
@@ -2918,7 +3042,29 @@
             
             createCheckboxFilter('osVersionFilterContainer', options, debouncedUpdateCharts);
         }
-        
+
+        function getDiskSpaceBucket(device) {
+            if (device.availableSpaceGB === null || device.availableSpaceGB === undefined) {
+                return 'Unknown';
+            } else if (device.availableSpaceGB < 1) {
+                return '< 1 GB available';
+            } else if (device.availableSpaceGB <= 3) {
+                return '1 – 3 GB available';
+            } else {
+                return '> 3 GB available';
+            }
+        }
+
+        function populateDiskSpaceFilter() {
+            const options = [
+                { value: '< 1 GB available', text: '< 1 GB available' },
+                { value: '1 – 3 GB available', text: '1 – 3 GB available' },
+                { value: '> 3 GB available', text: '> 3 GB available' },
+                { value: 'Unknown', text: 'Unknown' }
+            ];
+            createCheckboxFilter('diskSpaceFilterContainer', options, debouncedUpdateCharts);
+        }
+
         function updateOSVersionChart(data, selectedOSVersions) {
             // Aggressively destroy existing chart
             if (osVersionChart) {
@@ -3151,8 +3297,111 @@
                 }
             });
         }
-        
-        function updateDiskSpaceChart(filteredSchoolData) {
+
+        function updateAutoUpdateYearChart(filteredSchoolData) {
+            if (autoUpdateYearChart) {
+                autoUpdateYearChart.destroy();
+                autoUpdateYearChart = null;
+            }
+
+            const oldCanvas = document.getElementById('autoUpdateYearChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'autoUpdateYearChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            // Filter device-level data to only devices in the current filtered schools
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const yearCounts = new Map();
+            let unknownCount = 0;
+
+            filteredDevices.forEach(device => {
+                if (!device.originalAutoUpdateExpiration) {
+                    unknownCount++;
+                    return;
+                }
+                const aueDate = parseAutoUpdateDate(device.originalAutoUpdateExpiration);
+                if (!aueDate) {
+                    unknownCount++;
+                    return;
+                }
+                const year = aueDate.getFullYear();
+                yearCounts.set(year, (yearCounts.get(year) || 0) + 1);
+            });
+
+            // Sort years ascending
+            const sortedYears = Array.from(yearCounts.keys()).sort((a, b) => a - b);
+            const labels = sortedYears.map(y => String(y));
+            const counts = sortedYears.map(y => yearCounts.get(y));
+
+            // Append Unknown if any
+            if (unknownCount > 0) {
+                labels.push('Unknown');
+                counts.push(unknownCount);
+            }
+
+            const themeColors = [
+                '#0ea5e9', '#22d3ee', '#2dd4bf', '#34d399', '#a3e635',
+                '#facc15', '#fb923c', '#f87171', '#c084fc', '#e879f9'
+            ];
+            const backgroundColors = labels.map((_, i) => themeColors[i % themeColors.length]);
+
+            autoUpdateYearChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateDiskSpaceChart(filteredSchoolData, selectedDiskSpace) {
             if (diskSpaceChart) {
                 diskSpaceChart.destroy();
                 diskSpaceChart = null;
@@ -3167,9 +3416,16 @@
             const ctx = newCanvas.getContext('2d');
 
             // Filter device-level data to only devices in the current filtered schools
-            const filteredDevices = deviceLevelData.filter(device =>
-                filteredSchoolData.some(school => school.school === device.school)
-            );
+            // and matching selected disk space buckets
+            const filteredDevices = deviceLevelData.filter(device => {
+                if (!filteredSchoolData.some(school => school.school === device.school)) {
+                    return false;
+                }
+                if (selectedDiskSpace.length > 0) {
+                    return selectedDiskSpace.includes(getDiskSpaceBucket(device));
+                }
+                return true;
+            });
 
             const bucketLabels = [
                 '< 1 GB available',
@@ -3186,14 +3442,10 @@
             const counts = [0, 0, 0, 0];
 
             filteredDevices.forEach(device => {
-                if (device.availableSpaceGB === null || device.availableSpaceGB === undefined) {
-                    counts[3]++; // Unknown
-                } else if (device.availableSpaceGB < 1) {
-                    counts[0]++; // < 1 GB
-                } else if (device.availableSpaceGB <= 3) {
-                    counts[1]++; // 1–3 GB
-                } else {
-                    counts[2]++; // > 3 GB
+                const bucket = getDiskSpaceBucket(device);
+                const index = bucketLabels.indexOf(bucket);
+                if (index !== -1) {
+                    counts[index]++;
                 }
             });
 
@@ -3389,6 +3641,11 @@
             }).finally(() => {
                 if (btn) { btn.disabled = false; btn.textContent = origText; }
             });
+        }
+
+        // PDF. Uses the browser's print dialog with @media print styles.
+        function exportDashboardPDF() {
+            window.print();
         }
 
         // --- Theme toggle (light / dark) ---------------------------------
