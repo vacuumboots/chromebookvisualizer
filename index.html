@@ -1043,6 +1043,38 @@
 
             <figure class="figure">
                 <header class="figure__header">
+                    <span class="figure__num">Fig. 11</span>
+                    <h3 class="figure__title">Stale Devices by School</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="staleBySchoolChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
+                    <span class="figure__num">Fig. 12</span>
+                    <h3 class="figure__title">AUE Risk by School</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="aueBySchoolChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
+                    <span class="figure__num">Fig. 13</span>
+                    <h3 class="figure__title">OS Version Compliance</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="osComplianceChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
+                    <span class="figure__num">Fig. 14</span>
+                    <h3 class="figure__title">Unassigned Devices by School</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="unassignedBySchoolChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
                     <span class="figure__num">Tab. 01</span>
                     <h3 class="figure__title">Detailed School Analysis</h3>
                 </header>
@@ -1261,6 +1293,10 @@
         let enrollmentYearChart = null;
         let policySyncChart = null;
         let mostRecentActivityChart = null;
+        let staleBySchoolChart = null;
+        let aueBySchoolChart = null;
+        let osComplianceChart = null;
+        let unassignedBySchoolChart = null;
         let updateTimeout = null;
         let currentSortField = 'devices';
         let currentSortOrder = 'desc';
@@ -1497,6 +1533,12 @@
             if (mostRecentActivityIndex === -1) {
                 console.warn('mostRecentActivity column not found in devices CSV');
             }
+            const annotatedUserIndex = headers.findIndex(header =>
+                header.toLowerCase() === 'annotateduser'
+            );
+            if (annotatedUserIndex === -1) {
+                console.warn('annotatedUser column not found in devices CSV');
+            }
 
             if (orgUnitPathIndex === -1) {
                 throw new Error('orgUnitPath column not found in devices CSV');
@@ -1567,6 +1609,11 @@
                                 // Add mostRecentActivity if available
                                 if (mostRecentActivityIndex !== -1 && values.length > mostRecentActivityIndex) {
                                     device.mostRecentActivity = values[mostRecentActivityIndex]?.trim() || '';
+                                }
+
+                                // Add annotatedUser if available
+                                if (annotatedUserIndex !== -1 && values.length > annotatedUserIndex) {
+                                    device.annotatedUser = values[annotatedUserIndex]?.trim() || '';
                                 }
 
                                 // Add serialNumber if available
@@ -2219,6 +2266,18 @@
 
             // Update most recent activity chart
             updateMostRecentActivityChart(filteredData);
+
+            // Update stale devices by school chart
+            updateStaleBySchoolChart(filteredData);
+
+            // Update AUE risk by school chart
+            updateAUEBySchoolChart(filteredData);
+
+            // Update OS compliance chart
+            updateOSComplianceChart(filteredData);
+
+            // Update unassigned devices by school chart
+            updateUnassignedBySchoolChart(filteredData);
             
             // Update data table
             updateDataTable(filteredData);
@@ -2480,6 +2539,7 @@
                     (new Date(device.enrollmentTime).getFullYear() || 'Unknown') : 'Unknown';
                 const lastPolicySync = device.lastPolicySync || 'Unknown';
                 const mostRecentActivity = device.mostRecentActivity || 'Unknown';
+                const annotatedUser = device.annotatedUser || '';
                 const osVersion = device.osVersion || 'Unknown';
                 const rawAutoUpdate = device.autoUpdateExpiration || '';
                 
@@ -2529,7 +2589,9 @@
                     lastPolicySync: formattedSync,
                     originalSync: lastPolicySync, // Keep original for sorting
                     mostRecentActivity: mostRecentActivity,
+                    annotatedUser: annotatedUser,
                     osVersion: osVersion,
+                    originalOSVersion: device.osVersion || '',
                     autoUpdateExpiration: formattedAutoUpdate,
                     originalAutoUpdateExpiration: rawAutoUpdate, // YYYY-MM for sorting
                     availableSpaceGB: availableSpaceGB
@@ -3942,6 +4004,343 @@
                     },
                     scales: {
                         y: { beginAtZero: true, ticks: { precision: 0 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        function updateStaleBySchoolChart(filteredSchoolData) {
+            if (staleBySchoolChart) {
+                staleBySchoolChart.destroy();
+                staleBySchoolChart = null;
+            }
+
+            const oldCanvas = document.getElementById('staleBySchoolChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'staleBySchoolChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const staleCounts = {};
+            filteredDevices.forEach(device => {
+                const raw = device.mostRecentActivity;
+                let isStale = false;
+                if (!raw || raw === 'Unknown') {
+                    isStale = true;
+                } else if (raw.startsWith('date:')) {
+                    const dateMatch = raw.match(/date:(\d{4}-\d{2}-\d{2})/);
+                    if (dateMatch) {
+                        const activityDate = new Date(dateMatch[1]);
+                        if (!isNaN(activityDate.getTime())) {
+                            const daysSince = Math.floor((today - activityDate) / (1000 * 60 * 60 * 24));
+                            isStale = daysSince > 90;
+                        } else {
+                            isStale = true;
+                        }
+                    } else {
+                        isStale = true;
+                    }
+                } else {
+                    const activityDate = new Date(raw);
+                    isStale = isNaN(activityDate.getTime()) ? true : Math.floor((today - activityDate) / (1000 * 60 * 60 * 24)) > 90;
+                }
+
+                if (isStale) {
+                    staleCounts[device.school] = (staleCounts[device.school] || 0) + 1;
+                }
+            });
+
+            // Sort schools by stale count descending, take top 15
+            const sortedSchools = Object.entries(staleCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 15);
+
+            const labels = sortedSchools.map(([school]) => school);
+            const data = sortedSchools.map(([, count]) => count);
+
+            staleBySchoolChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Stale Devices',
+                        data: data,
+                        backgroundColor: '#ef4444',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y} stale devices`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Stale Device Count' } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        function updateAUEBySchoolChart(filteredSchoolData) {
+            if (aueBySchoolChart) {
+                aueBySchoolChart.destroy();
+                aueBySchoolChart = null;
+            }
+
+            const oldCanvas = document.getElementById('aueBySchoolChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'aueBySchoolChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+            const currentYear = new Date().getFullYear();
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const bucketLabels = ['Expired', `${currentYear}`, `${currentYear + 1}`, `${currentYear + 2}-${currentYear + 3}`, `${currentYear + 4}+`, 'Unknown'];
+            const bucketColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#6b7280'];
+
+            const schoolBuckets = {};
+            filteredDevices.forEach(device => {
+                const school = device.school;
+                if (!schoolBuckets[school]) {
+                    schoolBuckets[school] = [0, 0, 0, 0, 0, 0];
+                }
+                const raw = device.originalAutoUpdateExpiration;
+                if (!raw) {
+                    schoolBuckets[school][5]++;
+                    return;
+                }
+                const match = raw.match(/^(\d{4})/);
+                if (!match) {
+                    schoolBuckets[school][5]++;
+                    return;
+                }
+                const year = parseInt(match[1], 10);
+                if (year < currentYear) schoolBuckets[school][0]++;
+                else if (year === currentYear) schoolBuckets[school][1]++;
+                else if (year === currentYear + 1) schoolBuckets[school][2]++;
+                else if (year <= currentYear + 3) schoolBuckets[school][3]++;
+                else schoolBuckets[school][4]++;
+            });
+
+            // Sort schools by total devices descending, take top 12
+            const sortedSchools = Object.entries(schoolBuckets)
+                .map(([school, counts]) => ({ school, counts, total: counts.reduce((a, b) => a + b, 0) }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 12);
+
+            const labels = sortedSchools.map(s => s.school);
+            const datasets = bucketLabels.map((label, i) => ({
+                label: label,
+                data: sortedSchools.map(s => s.counts[i]),
+                backgroundColor: bucketColors[i],
+                borderWidth: 1
+            }));
+
+            aueBySchoolChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y} devices`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 }, stacked: true },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 }, stacked: true }
+                    }
+                }
+            });
+        }
+
+        function updateOSComplianceChart(filteredSchoolData) {
+            if (osComplianceChart) {
+                osComplianceChart.destroy();
+                osComplianceChart = null;
+            }
+
+            const oldCanvas = document.getElementById('osComplianceChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'osComplianceChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            // Find the maximum major version in the dataset
+            let maxMajor = 0;
+            filteredDevices.forEach(device => {
+                const raw = device.originalOSVersion;
+                if (raw) {
+                    const major = parseInt(raw.split('.')[0], 10);
+                    if (!isNaN(major) && major > maxMajor) maxMajor = major;
+                }
+            });
+            if (maxMajor === 0) maxMajor = 146; // fallback
+
+            const bucketLabels = ['Current', '1 Behind', '2+ Behind', 'Unknown'];
+            const bucketColors = ['#22c55e', '#84cc16', '#ef4444', '#6b7280'];
+            const counts = [0, 0, 0, 0];
+
+            filteredDevices.forEach(device => {
+                const raw = device.originalOSVersion;
+                if (!raw) {
+                    counts[3]++;
+                    return;
+                }
+                const major = parseInt(raw.split('.')[0], 10);
+                if (isNaN(major)) {
+                    counts[3]++;
+                    return;
+                }
+                if (major === maxMajor) counts[0]++;
+                else if (major === maxMajor - 1) counts[1]++;
+                else counts[2]++;
+            });
+
+            osComplianceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bucketLabels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: bucketColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        function updateUnassignedBySchoolChart(filteredSchoolData) {
+            if (unassignedBySchoolChart) {
+                unassignedBySchoolChart.destroy();
+                unassignedBySchoolChart = null;
+            }
+
+            const oldCanvas = document.getElementById('unassignedBySchoolChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'unassignedBySchoolChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const unassignedCounts = {};
+            filteredDevices.forEach(device => {
+                if (!device.annotatedUser || device.annotatedUser.trim() === '') {
+                    unassignedCounts[device.school] = (unassignedCounts[device.school] || 0) + 1;
+                }
+            });
+
+            // Sort schools by unassigned count descending, take top 15
+            const sortedSchools = Object.entries(unassignedCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 15);
+
+            const labels = sortedSchools.map(([school]) => school);
+            const data = sortedSchools.map(([, count]) => count);
+
+            unassignedBySchoolChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Unassigned Devices',
+                        data: data,
+                        backgroundColor: '#f59e0b',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y} unassigned devices`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Unassigned Device Count' } },
                         x: { ticks: { maxRotation: 45, minRotation: 0 } }
                     }
                 }
