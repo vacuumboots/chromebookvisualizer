@@ -4079,24 +4079,25 @@
                     }]
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
-                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    layout: { padding: { left: 10, right: 10, bottom: 10 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return `${context.parsed.y} stale devices`;
+                                    return `${context.parsed.x} stale devices`;
                                 }
                             }
                         }
                     },
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Stale Device Count' } },
-                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                        x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Stale Device Count' } },
+                        y: { ticks: { autoSkip: false } }
                     }
                 }
             });
@@ -4169,23 +4170,24 @@
                     datasets: datasets
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
-                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    layout: { padding: { left: 10, right: 10, bottom: 10 } },
                     plugins: {
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return `${context.dataset.label}: ${context.parsed.y} devices`;
+                                    return `${context.dataset.label}: ${context.parsed.x} devices`;
                                 }
                             }
                         }
                     },
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, stacked: true },
-                        x: { ticks: { maxRotation: 45, minRotation: 0 }, stacked: true }
+                        x: { beginAtZero: true, ticks: { precision: 0 }, stacked: true },
+                        y: { ticks: { autoSkip: false }, stacked: true }
                     }
                 }
             });
@@ -4324,24 +4326,25 @@
                     }]
                 },
                 options: {
+                    indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
-                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    layout: { padding: { left: 10, right: 10, bottom: 10 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return `${context.parsed.y} unassigned devices`;
+                                    return `${context.parsed.x} unassigned devices`;
                                 }
                             }
                         }
                     },
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Unassigned Device Count' } },
-                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                        x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Unassigned Device Count' } },
+                        y: { ticks: { autoSkip: false } }
                     }
                 }
             });
@@ -4513,7 +4516,7 @@
                 updateCharts();
             }
             // Allow charts to repaint with new colours
-            await new Promise(r => setTimeout(r, 400));
+            await new Promise(r => setTimeout(r, 600));
 
             try {
                 const figures = Array.from(document.querySelectorAll('#content .figure')).filter(f => f.querySelector('canvas'));
@@ -4525,112 +4528,64 @@
                 const pdf = new jsPDFConstructor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
                 const pageWidth = 210;
                 const pageHeight = 297;
-                const margin = 12;
-                const gap = 6;
+                const margin = 14;
                 const maxW = pageWidth - margin * 2;
-                const maxH = pageHeight - margin * 2;
-                let currentY = margin;
+                const usableH = pageHeight - margin * 2;
+                // Target ~2 charts per page; each figure block should be <= half page minus gap
+                const halfH = Math.floor(usableH / 2) - 4;
 
-                // Helper to add data labels extracted from a Chart.js instance.
-                function addDataLabels(pdf, chart, x, y, availW) {
-                    if (!chart || !chart.data) return 0;
-                    const labels = chart.data.labels || [];
-                    const dataset = chart.data.datasets?.[0];
-                    if (!dataset) return 0;
-                    const data = dataset.data || [];
-                    if (!labels.length || labels.length > 28) return 0;
-
-                    const total = data.reduce((a, b) => (a || 0) + (b || 0), 0);
-                    const isCircular = chart.config.type === 'doughnut' || chart.config.type === 'pie';
-
-                    const lines = labels.map((label, i) => {
-                        const val = data[i] || 0;
-                        const text = String(label).replace(/[\r\n]/g, ' ').substring(0, 40);
-                        if (isCircular && total > 0) {
-                            const pct = ((val / total) * 100).toFixed(1);
-                            return `${text}: ${val} (${pct}%)`;
-                        }
-                        return `${text}: ${val}`;
-                    });
-
-                    pdf.setFontSize(7.5);
-                    pdf.setTextColor(60, 60, 60);
-                    const lineHeight = 3.3;
-                    const colGap = 5;
-                    let textY = y;
-
-                    if (lines.length > 10) {
-                        const half = Math.ceil(lines.length / 2);
-                        const left = lines.slice(0, half);
-                        const right = lines.slice(half);
-                        const rows = Math.max(left.length, right.length);
-                        const colW = (availW - colGap) / 2;
-                        for (let r = 0; r < rows; r++) {
-                            if (left[r]) pdf.text(left[r], x, textY);
-                            if (right[r]) pdf.text(right[r], x + colW + colGap, textY);
-                            textY += lineHeight;
-                        }
-                        return rows * lineHeight + 2;
-                    } else {
-                        lines.forEach(line => {
-                            pdf.text(line, x, textY);
-                            textY += lineHeight;
-                        });
-                        return lines.length * lineHeight + 2;
-                    }
+                function drawHeader(pageNum) {
+                    pdf.setFontSize(10);
+                    pdf.setTextColor(100, 100, 100);
+                    pdf.text(config.dashboardTitle || 'cb-visual Dashboard', margin, margin - 4);
+                    const dateStr = new Date().toLocaleDateString();
+                    const pageStr = `Page ${pageNum}`;
+                    const dateW = pdf.getStringUnitWidth(dateStr) * 10 / pdf.internal.scaleFactor;
+                    const pageW = pdf.getStringUnitWidth(pageStr) * 10 / pdf.internal.scaleFactor;
+                    pdf.text(dateStr, pageWidth - margin - dateW, margin - 4);
+                    pdf.text(pageStr, (pageWidth - pageW) / 2, pageHeight - margin + 6);
                 }
 
+                let pageNum = 1;
+                let currentY = margin;
+                drawHeader(pageNum);
+
                 for (let i = 0; i < figures.length; i++) {
-                    const canvas = figures[i].querySelector('canvas');
-                    const chartInstance = canvas ? Chart.getChart(canvas) : null;
-
-                    // Pre-estimate label height so we can page-break if needed
-                    let labelHeight = 0;
-                    if (chartInstance && chartInstance.data?.labels?.length <= 28) {
-                        const n = chartInstance.data.labels.length;
-                        const rows = n > 10 ? Math.ceil(n / 2) : n;
-                        labelHeight = rows * 3.3 + 4;
-                    }
-
                     const snapshot = await html2canvas(figures[i], {
-                        scale: 2,
+                        scale: 2.5,
                         backgroundColor: '#ffffff',
                         useCORS: true,
                         logging: false
                     });
 
-                    const imgData = snapshot.toDataURL('image/jpeg', 0.92);
+                    const imgData = snapshot.toDataURL('image/jpeg', 0.94);
                     const ratio = snapshot.height / snapshot.width;
 
+                    // Fit to page width, cap height to avoid squishing
                     let w = maxW;
                     let h = w * ratio;
-                    if (h > maxH) {
-                        h = maxH;
+                    if (h > halfH) {
+                        h = halfH;
                         w = h / ratio;
                     }
-
-                    // Start a new page if chart + labels won't fit
-                    if (currentY + h + labelHeight > pageHeight - margin) {
-                        pdf.addPage();
-                        currentY = margin;
-                    }
-
+                    // Center horizontally
                     const x = (pageWidth - w) / 2;
-                    pdf.addImage(imgData, 'JPEG', x, currentY, w, h);
-                    currentY += h + 2;
 
-                    if (chartInstance) {
-                        const added = addDataLabels(pdf, chartInstance, margin, currentY, maxW);
-                        currentY += added;
+                    // Ensure whole block fits; if not, start new page
+                    if (currentY + h > pageHeight - margin) {
+                        pdf.addPage();
+                        pageNum++;
+                        currentY = margin;
+                        drawHeader(pageNum);
                     }
 
-                    currentY += gap;
+                    pdf.addImage(imgData, 'JPEG', x, currentY, w, h);
+                    currentY += h + 6;
                 }
 
                 pdf.save('cb-visual-dashboard-' + new Date().toISOString().slice(0, 10) + '.pdf');
             } catch (err) {
                 console.error('PDF export failed:', err);
-                // Fall back to browser print if programmatic export fails
                 window.print();
             } finally {
                 // Restore original theme
