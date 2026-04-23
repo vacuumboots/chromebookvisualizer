@@ -1011,6 +1011,30 @@
 
             <figure class="figure">
                 <header class="figure__header">
+                    <span class="figure__num">Fig. 07</span>
+                    <h3 class="figure__title">Manufacturing Year Distribution</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="manufacturingYearChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
+                    <span class="figure__num">Fig. 08</span>
+                    <h3 class="figure__title">Enrollment Year Distribution</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="enrollmentYearChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
+                    <span class="figure__num">Fig. 09</span>
+                    <h3 class="figure__title">Last Policy Sync Recency</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="policySyncChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
                     <span class="figure__num">Tab. 01</span>
                     <h3 class="figure__title">Detailed School Analysis</h3>
                 </header>
@@ -1225,6 +1249,9 @@
         let autoUpdateChart = null;
         let autoUpdateYearChart = null;
         let diskSpaceChart = null;
+        let manufacturingYearChart = null;
+        let enrollmentYearChart = null;
+        let policySyncChart = null;
         let updateTimeout = null;
         let currentSortField = 'devices';
         let currentSortOrder = 'desc';
@@ -1449,6 +1476,12 @@
             if (diskSpaceUsageByteIndex === -1) {
                 console.warn('diskSpaceUsageByte column not found in devices CSV');
             }
+            const enrollmentTimeIndex = headers.findIndex(header =>
+                header.toLowerCase() === 'enrollmenttime'
+            );
+            if (enrollmentTimeIndex === -1) {
+                console.warn('enrollmentTime column not found in devices CSV');
+            }
 
             if (orgUnitPathIndex === -1) {
                 throw new Error('orgUnitPath column not found in devices CSV');
@@ -1509,6 +1542,11 @@
                                 // Add diskSpaceUsageByte if available
                                 if (diskSpaceUsageByteIndex !== -1 && values.length > diskSpaceUsageByteIndex) {
                                     device.diskSpaceUsageByte = values[diskSpaceUsageByteIndex]?.trim() || '';
+                                }
+
+                                // Add enrollmentTime if available
+                                if (enrollmentTimeIndex !== -1 && values.length > enrollmentTimeIndex) {
+                                    device.enrollmentTime = values[enrollmentTimeIndex]?.trim() || '';
                                 }
 
                                 // Add serialNumber if available
@@ -2149,6 +2187,15 @@
 
             // Update disk space chart
             updateDiskSpaceChart(filteredData, selectedDiskSpace);
+
+            // Update manufacturing year chart
+            updateManufacturingYearChart(filteredData);
+
+            // Update enrollment year chart
+            updateEnrollmentYearChart(filteredData);
+
+            // Update policy sync recency chart
+            updatePolicySyncChart(filteredData);
             
             // Update data table
             updateDataTable(filteredData);
@@ -2406,6 +2453,8 @@
                 const model = device.model || 'Unknown';
                 const manufacturingYear = device.manufacturingDate ? 
                     (new Date(device.manufacturingDate).getFullYear() || 'Unknown') : 'Unknown';
+                const enrollmentYear = device.enrollmentTime ?
+                    (new Date(device.enrollmentTime).getFullYear() || 'Unknown') : 'Unknown';
                 const lastPolicySync = device.lastPolicySync || 'Unknown';
                 const osVersion = device.osVersion || 'Unknown';
                 const rawAutoUpdate = device.autoUpdateExpiration || '';
@@ -2452,6 +2501,7 @@
                     serialNumber: device.serialNumber || '',
                     model: model,
                     manufacturingYear: manufacturingYear.toString(),
+                    enrollmentYear: enrollmentYear.toString(),
                     lastPolicySync: formattedSync,
                     originalSync: lastPolicySync, // Keep original for sorting
                     osVersion: osVersion,
@@ -3499,6 +3549,271 @@
                                 minRotation: 0
                             }
                         }
+                    }
+                }
+            });
+        }
+
+        function updateManufacturingYearChart(filteredSchoolData) {
+            if (manufacturingYearChart) {
+                manufacturingYearChart.destroy();
+                manufacturingYearChart = null;
+            }
+
+            const oldCanvas = document.getElementById('manufacturingYearChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'manufacturingYearChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const yearCounts = new Map();
+            let unknownCount = 0;
+
+            filteredDevices.forEach(device => {
+                const year = device.manufacturingYear;
+                if (!year || year === 'Unknown' || isNaN(parseInt(year, 10))) {
+                    unknownCount++;
+                    return;
+                }
+                const y = parseInt(year, 10);
+                yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
+            });
+
+            const sortedYears = Array.from(yearCounts.keys()).sort((a, b) => a - b);
+            const labels = sortedYears.map(y => String(y));
+            const counts = sortedYears.map(y => yearCounts.get(y));
+
+            if (unknownCount > 0) {
+                labels.push('Unknown');
+                counts.push(unknownCount);
+            }
+
+            const themeColors = [
+                '#0ea5e9', '#22d3ee', '#2dd4bf', '#34d399', '#a3e635',
+                '#facc15', '#fb923c', '#f87171', '#c084fc', '#e879f9'
+            ];
+            const backgroundColors = labels.map((_, i) => themeColors[i % themeColors.length]);
+
+            manufacturingYearChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        function updateEnrollmentYearChart(filteredSchoolData) {
+            if (enrollmentYearChart) {
+                enrollmentYearChart.destroy();
+                enrollmentYearChart = null;
+            }
+
+            const oldCanvas = document.getElementById('enrollmentYearChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'enrollmentYearChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const yearCounts = new Map();
+            let unknownCount = 0;
+
+            filteredDevices.forEach(device => {
+                const year = device.enrollmentYear;
+                if (!year || year === 'Unknown' || isNaN(parseInt(year, 10))) {
+                    unknownCount++;
+                    return;
+                }
+                const y = parseInt(year, 10);
+                yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
+            });
+
+            const sortedYears = Array.from(yearCounts.keys()).sort((a, b) => a - b);
+            const labels = sortedYears.map(y => String(y));
+            const counts = sortedYears.map(y => yearCounts.get(y));
+
+            if (unknownCount > 0) {
+                labels.push('Unknown');
+                counts.push(unknownCount);
+            }
+
+            const themeColors = [
+                '#0ea5e9', '#22d3ee', '#2dd4bf', '#34d399', '#a3e635',
+                '#facc15', '#fb923c', '#f87171', '#c084fc', '#e879f9'
+            ];
+            const backgroundColors = labels.map((_, i) => themeColors[i % themeColors.length]);
+
+            enrollmentYearChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        function updatePolicySyncChart(filteredSchoolData) {
+            if (policySyncChart) {
+                policySyncChart.destroy();
+                policySyncChart = null;
+            }
+
+            const oldCanvas = document.getElementById('policySyncChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'policySyncChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const bucketLabels = [
+                '< 7 days',
+                '7 – 30 days',
+                '30 – 90 days',
+                '> 90 days',
+                'Unknown'
+            ];
+            const bucketColors = [
+                '#22c55e',
+                '#84cc16',
+                '#eab308',
+                '#ef4444',
+                '#6b7280'
+            ];
+            const counts = [0, 0, 0, 0, 0];
+
+            filteredDevices.forEach(device => {
+                const raw = device.originalSync;
+                if (!raw || raw === 'Unknown') {
+                    counts[4]++; // Unknown
+                    return;
+                }
+                const syncDate = new Date(raw);
+                if (isNaN(syncDate.getTime())) {
+                    counts[4]++; // Unknown
+                    return;
+                }
+                const daysSince = Math.floor((today - syncDate) / (1000 * 60 * 60 * 24));
+
+                if (daysSince < 7)       counts[0]++; // < 7 days
+                else if (daysSince <= 30)  counts[1]++; // 7-30 days
+                else if (daysSince <= 90)  counts[2]++; // 30-90 days
+                else                       counts[3]++; // > 90 days
+            });
+
+            policySyncChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bucketLabels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: bucketColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
                     }
                 }
             });
