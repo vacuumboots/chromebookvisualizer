@@ -1,0 +1,54 @@
+{
+  "_comment": "Automation configuration for cb-visual Raspberry Pi pipeline. Adjust paths and GAM commands for your environment.",
+
+  "gam": {
+    "devices_command": "gam print cros fields annotateduser,autoupdateexpiration,diskspaceusagebyte,enrollmenttime,lastpolicysync,manufacturingdate,model,mostrecentactivity,orgunitpath,osversion,serialnumber",
+    "users_command": "gam print users fields primaryemail,orgunitpath,status"
+  },
+
+  "output": {
+    "raw_devices_csv": "data/devices_gam.csv",
+    "raw_users_csv": "data/users_gam.csv",
+    "transformed_devices_csv": "data/devices.csv",
+    "transformed_users_csv": "data/users.csv",
+    "pdf_output_dir": "data/pdfs",
+    "network_share_dir": "/mnt/sharepoint-drop"
+  },
+
+  "visualizer": {
+    "ou_prefix": "/",
+    "grouping_depth": 1,
+    "excluded_patterns": ["/staff", "exam", "administration", "maint"],
+    "ratio_good": 1.2,
+    "ratio_acceptable": 1.5,
+    "dashboard_title": "Chromebook Ratio Report"
+  },
+
+  "pdf": {
+    "format": "A4",
+    "print_background": true,
+    "prefer_css_page_size": true,
+    "wait_ms_after_filter": 800,
+    "wait_ms_after_load": 1200
+  },
+
+  "header_map": {
+    "devices": {
+      "orgunitpath": "orgUnitPath",
+      "model": "model",
+      "lastpolicysync": "lastPolicySync",
+      "manufacturingdate": "manufacturingDate",
+      "osversion": "osVersion",
+      "autoupdateexpiration": "autoUpdateExpiration",
+      "serialnumber": "serialNumber",
+      "diskspaceusagebyte": "diskSpaceUsageByte",
+      "enrollmenttime": "enrollmentTime",
+      "mostrecentactivity": "mostRecentActivity",
+      "annotateduser": "annotatedUser"
+    },
+    "users": {
+      "orgunitpath": "Org Unit Path [Required]",
+      "status": "Status [READ ONLY]"
+    }
+  }
+}
