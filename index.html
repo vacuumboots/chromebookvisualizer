@@ -7,6 +7,7 @@
     <meta name="description" content="Per-school device distribution and student ratios from your Google Workspace CSV exports.">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root {
             /* Typography */
@@ -731,8 +732,8 @@
             .figure__num { color: #666 !important; }
             .figure__title { color: #000 !important; }
             .figure__chart-wrap {
-                max-height: 280px !important;
-                height: 280px !important;
+                max-height: 350px !important;
+                height: auto !important;
             }
 
             .data-table {
@@ -749,12 +750,12 @@
                 border-bottom: 1px solid #ddd;
             }
 
-            /* Force page breaks before major chart sections */
-            .figure:nth-of-type(3),
-            .figure:nth-of-type(5),
-            .figure:nth-of-type(7) {
+            /* Each figure gets its own page so charts are never clipped */
+            .figure {
                 break-before: page;
                 page-break-before: always;
+                break-inside: avoid;
+                page-break-inside: avoid;
             }
         }
     </style>
@@ -2663,6 +2664,7 @@
             return {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: { padding: { left: 10, right: 10, bottom: 25 } },
                 plugins: {
                     legend: {
                         display: chartType !== 'bar',
@@ -2706,7 +2708,7 @@
                         grid: { display: false },
                         ticks: {
                             maxRotation: 45,
-                            minRotation: 45,
+                            minRotation: 0,
                             font: { family: t.font, size: 11 },
                             color: t.text,
                             padding: 8
@@ -3150,6 +3152,7 @@
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
                     plugins: {
                         legend: {
                             display: false
@@ -3176,7 +3179,7 @@
                         x: {
                             ticks: {
                                 maxRotation: 45,
-                                minRotation: 45
+                                minRotation: 0
                             }
                         }
                     }
@@ -3264,6 +3267,7 @@
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
                     plugins: {
                         legend: {
                             display: false
@@ -3290,7 +3294,7 @@
                         x: {
                             ticks: {
                                 maxRotation: 45,
-                                minRotation: 45
+                                minRotation: 0
                             }
                         }
                     }
@@ -3367,6 +3371,7 @@
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
                     plugins: {
                         legend: {
                             display: false
@@ -3393,7 +3398,7 @@
                         x: {
                             ticks: {
                                 maxRotation: 45,
-                                minRotation: 45
+                                minRotation: 0
                             }
                         }
                     }
@@ -3465,6 +3470,7 @@
                     maintainAspectRatio: false,
                     animation: false,
                     responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
                     plugins: {
                         legend: {
                             display: false
@@ -3490,7 +3496,7 @@
                         x: {
                             ticks: {
                                 maxRotation: 45,
-                                minRotation: 45
+                                minRotation: 0
                             }
                         }
                     }
@@ -3643,9 +3649,156 @@
             });
         }
 
-        // PDF. Uses the browser's print dialog with @media print styles.
-        function exportDashboardPDF() {
-            window.print();
+        // --- Dashboard PDF export -----------------------------------------
+        // Uses html2canvas to capture each chart figure and jsPDF to build a
+        // multi-page PDF. Charts are centred, one per page, at high resolution.
+        // Temporarily switches to light theme for a clean, print-friendly look.
+        async function exportDashboardPDF() {
+            const btn = document.getElementById('exportPdfBtn');
+            const origText = btn ? btn.textContent : 'Save as PDF';
+            if (btn) { btn.disabled = true; btn.textContent = 'Generating PDF…'; }
+
+            const root = document.documentElement;
+            const storageKey = 'returnspace-theme';
+            let originalTheme = 'dark';
+            try { originalTheme = localStorage.getItem(storageKey) || 'dark'; } catch (e) {}
+
+            // Switch to light theme for clean PDF output
+            root.classList.add('theme-light');
+            applyChartDefaults();
+            if (typeof updateCharts === 'function' && devicesData.length && studentsData.length) {
+                updateCharts();
+            }
+            // Allow charts to repaint with new colours
+            await new Promise(r => setTimeout(r, 400));
+
+            try {
+                const figures = Array.from(document.querySelectorAll('#content .figure')).filter(f => f.querySelector('canvas'));
+                if (!figures.length) throw new Error('No chart figures found to export.');
+
+                const jsPDFConstructor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+                if (!jsPDFConstructor) throw new Error('PDF library not loaded.');
+
+                const pdf = new jsPDFConstructor({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                const pageWidth = 210;
+                const pageHeight = 297;
+                const margin = 12;
+                const gap = 6;
+                const maxW = pageWidth - margin * 2;
+                const maxH = pageHeight - margin * 2;
+                let currentY = margin;
+
+                // Helper to add data labels extracted from a Chart.js instance.
+                function addDataLabels(pdf, chart, x, y, availW) {
+                    if (!chart || !chart.data) return 0;
+                    const labels = chart.data.labels || [];
+                    const dataset = chart.data.datasets?.[0];
+                    if (!dataset) return 0;
+                    const data = dataset.data || [];
+                    if (!labels.length || labels.length > 28) return 0;
+
+                    const total = data.reduce((a, b) => (a || 0) + (b || 0), 0);
+                    const isCircular = chart.config.type === 'doughnut' || chart.config.type === 'pie';
+
+                    const lines = labels.map((label, i) => {
+                        const val = data[i] || 0;
+                        const text = String(label).replace(/[\r\n]/g, ' ').substring(0, 40);
+                        if (isCircular && total > 0) {
+                            const pct = ((val / total) * 100).toFixed(1);
+                            return `${text}: ${val} (${pct}%)`;
+                        }
+                        return `${text}: ${val}`;
+                    });
+
+                    pdf.setFontSize(7.5);
+                    pdf.setTextColor(60, 60, 60);
+                    const lineHeight = 3.3;
+                    const colGap = 5;
+                    let textY = y;
+
+                    if (lines.length > 10) {
+                        const half = Math.ceil(lines.length / 2);
+                        const left = lines.slice(0, half);
+                        const right = lines.slice(half);
+                        const rows = Math.max(left.length, right.length);
+                        const colW = (availW - colGap) / 2;
+                        for (let r = 0; r < rows; r++) {
+                            if (left[r]) pdf.text(left[r], x, textY);
+                            if (right[r]) pdf.text(right[r], x + colW + colGap, textY);
+                            textY += lineHeight;
+                        }
+                        return rows * lineHeight + 2;
+                    } else {
+                        lines.forEach(line => {
+                            pdf.text(line, x, textY);
+                            textY += lineHeight;
+                        });
+                        return lines.length * lineHeight + 2;
+                    }
+                }
+
+                for (let i = 0; i < figures.length; i++) {
+                    const canvas = figures[i].querySelector('canvas');
+                    const chartInstance = canvas ? Chart.getChart(canvas) : null;
+
+                    // Pre-estimate label height so we can page-break if needed
+                    let labelHeight = 0;
+                    if (chartInstance && chartInstance.data?.labels?.length <= 28) {
+                        const n = chartInstance.data.labels.length;
+                        const rows = n > 10 ? Math.ceil(n / 2) : n;
+                        labelHeight = rows * 3.3 + 4;
+                    }
+
+                    const snapshot = await html2canvas(figures[i], {
+                        scale: 2,
+                        backgroundColor: '#ffffff',
+                        useCORS: true,
+                        logging: false
+                    });
+
+                    const imgData = snapshot.toDataURL('image/jpeg', 0.92);
+                    const ratio = snapshot.height / snapshot.width;
+
+                    let w = maxW;
+                    let h = w * ratio;
+                    if (h > maxH) {
+                        h = maxH;
+                        w = h / ratio;
+                    }
+
+                    // Start a new page if chart + labels won't fit
+                    if (currentY + h + labelHeight > pageHeight - margin) {
+                        pdf.addPage();
+                        currentY = margin;
+                    }
+
+                    const x = (pageWidth - w) / 2;
+                    pdf.addImage(imgData, 'JPEG', x, currentY, w, h);
+                    currentY += h + 2;
+
+                    if (chartInstance) {
+                        const added = addDataLabels(pdf, chartInstance, margin, currentY, maxW);
+                        currentY += added;
+                    }
+
+                    currentY += gap;
+                }
+
+                pdf.save('cb-visual-dashboard-' + new Date().toISOString().slice(0, 10) + '.pdf');
+            } catch (err) {
+                console.error('PDF export failed:', err);
+                // Fall back to browser print if programmatic export fails
+                window.print();
+            } finally {
+                // Restore original theme
+                root.classList.toggle('theme-light', originalTheme === 'light');
+                try { localStorage.setItem(storageKey, originalTheme); } catch (e) {}
+                applyChartDefaults();
+                if (typeof updateCharts === 'function' && devicesData.length && studentsData.length) {
+                    updateCharts();
+                }
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
+            }
         }
 
         // --- Theme toggle (light / dark) ---------------------------------
