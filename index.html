@@ -1035,6 +1035,14 @@
 
             <figure class="figure">
                 <header class="figure__header">
+                    <span class="figure__num">Fig. 10</span>
+                    <h3 class="figure__title">Device Usage Recency</h3>
+                </header>
+                <div class="figure__chart-wrap" style="max-height: 400px;"><canvas id="mostRecentActivityChart"></canvas></div>
+            </figure>
+
+            <figure class="figure">
+                <header class="figure__header">
                     <span class="figure__num">Tab. 01</span>
                     <h3 class="figure__title">Detailed School Analysis</h3>
                 </header>
@@ -1252,6 +1260,7 @@
         let manufacturingYearChart = null;
         let enrollmentYearChart = null;
         let policySyncChart = null;
+        let mostRecentActivityChart = null;
         let updateTimeout = null;
         let currentSortField = 'devices';
         let currentSortOrder = 'desc';
@@ -1482,6 +1491,12 @@
             if (enrollmentTimeIndex === -1) {
                 console.warn('enrollmentTime column not found in devices CSV');
             }
+            const mostRecentActivityIndex = headers.findIndex(header =>
+                header.toLowerCase() === 'mostrecentactivity'
+            );
+            if (mostRecentActivityIndex === -1) {
+                console.warn('mostRecentActivity column not found in devices CSV');
+            }
 
             if (orgUnitPathIndex === -1) {
                 throw new Error('orgUnitPath column not found in devices CSV');
@@ -1547,6 +1562,11 @@
                                 // Add enrollmentTime if available
                                 if (enrollmentTimeIndex !== -1 && values.length > enrollmentTimeIndex) {
                                     device.enrollmentTime = values[enrollmentTimeIndex]?.trim() || '';
+                                }
+
+                                // Add mostRecentActivity if available
+                                if (mostRecentActivityIndex !== -1 && values.length > mostRecentActivityIndex) {
+                                    device.mostRecentActivity = values[mostRecentActivityIndex]?.trim() || '';
                                 }
 
                                 // Add serialNumber if available
@@ -2196,6 +2216,9 @@
 
             // Update policy sync recency chart
             updatePolicySyncChart(filteredData);
+
+            // Update most recent activity chart
+            updateMostRecentActivityChart(filteredData);
             
             // Update data table
             updateDataTable(filteredData);
@@ -2456,6 +2479,7 @@
                 const enrollmentYear = device.enrollmentTime ?
                     (new Date(device.enrollmentTime).getFullYear() || 'Unknown') : 'Unknown';
                 const lastPolicySync = device.lastPolicySync || 'Unknown';
+                const mostRecentActivity = device.mostRecentActivity || 'Unknown';
                 const osVersion = device.osVersion || 'Unknown';
                 const rawAutoUpdate = device.autoUpdateExpiration || '';
                 
@@ -2504,6 +2528,7 @@
                     enrollmentYear: enrollmentYear.toString(),
                     lastPolicySync: formattedSync,
                     originalSync: lastPolicySync, // Keep original for sorting
+                    mostRecentActivity: mostRecentActivity,
                     osVersion: osVersion,
                     autoUpdateExpiration: formattedAutoUpdate,
                     originalAutoUpdateExpiration: rawAutoUpdate, // YYYY-MM for sorting
@@ -3781,6 +3806,110 @@
             });
 
             policySyncChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bucketLabels,
+                    datasets: [{
+                        label: 'Devices',
+                        data: counts,
+                        backgroundColor: bucketColors,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    responsiveAnimationDuration: 0,
+                    layout: { padding: { left: 10, right: 10, bottom: 25 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed.y;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return `${label}: ${value} devices (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 0 } }
+                    }
+                }
+            });
+        }
+
+        function updateMostRecentActivityChart(filteredSchoolData) {
+            if (mostRecentActivityChart) {
+                mostRecentActivityChart.destroy();
+                mostRecentActivityChart = null;
+            }
+
+            const oldCanvas = document.getElementById('mostRecentActivityChart');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'mostRecentActivityChart';
+            newCanvas.style.maxHeight = '400px';
+            oldCanvas.parentNode.replaceChild(newCanvas, oldCanvas);
+
+            const ctx = newCanvas.getContext('2d');
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const filteredDevices = deviceLevelData.filter(device =>
+                filteredSchoolData.some(school => school.school === device.school)
+            );
+
+            const bucketLabels = [
+                '< 7 days',
+                '7 – 30 days',
+                '30 – 90 days',
+                '> 90 days',
+                'Unknown'
+            ];
+            const bucketColors = [
+                '#22c55e',
+                '#84cc16',
+                '#eab308',
+                '#ef4444',
+                '#6b7280'
+            ];
+            const counts = [0, 0, 0, 0, 0];
+
+            filteredDevices.forEach(device => {
+                const raw = device.mostRecentActivity;
+                if (!raw || raw === 'Unknown') {
+                    counts[4]++; // Unknown
+                    return;
+                }
+                // Parse date from "date:YYYY-MM-DD durationSeconds:N" format
+                let activityDate = null;
+                if (raw.startsWith('date:')) {
+                    const dateMatch = raw.match(/date:(\d{4}-\d{2}-\d{2})/);
+                    if (dateMatch) {
+                        activityDate = new Date(dateMatch[1]);
+                    }
+                } else {
+                    activityDate = new Date(raw);
+                }
+                if (!activityDate || isNaN(activityDate.getTime())) {
+                    counts[4]++; // Unknown
+                    return;
+                }
+                const daysSince = Math.floor((today - activityDate) / (1000 * 60 * 60 * 24));
+
+                if (daysSince < 7)       counts[0]++; // < 7 days
+                else if (daysSince <= 30)  counts[1]++; // 7-30 days
+                else if (daysSince <= 90)  counts[2]++; // 30-90 days
+                else                       counts[3]++; // > 90 days
+            });
+
+            mostRecentActivityChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: bucketLabels,
