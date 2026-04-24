@@ -17,3 +17,7 @@ Thumbs.db
 *.swp
 *.swo
 hermes-agent/
+
+# Environment files (local secrets)
+automation/.env
+.env
