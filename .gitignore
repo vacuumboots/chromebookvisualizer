@@ -21,3 +21,4 @@ hermes-agent/
 # Environment files (local secrets)
 automation/.env
 .env
+!data/config.json
