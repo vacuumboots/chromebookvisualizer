@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
 """
-Headless PDF generation for cb-visual using Playwright.
+Headless screenshot-to-PDF generation for cb-visual using Playwright.
 
-Loads the local index.html, injects the two CSVs, discovers schools,
-and prints one PDF per school using the browser's built-in print-to-PDF
-(which respects the existing @media print stylesheet).
+Loads the local index.html via HTTP, injects CSVs, discovers schools,
+and captures a full-page screenshot per school. Each screenshot is
+converted to a single-page PDF (page size = image size) so charts
+are never clipped or scaled to A4.
 """
 import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import threading
 
 from playwright.sync_api import sync_playwright
+from PIL import Image
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
+
+# Get current date in YYYY-MM-DD format
+REPORT_DATE = datetime.now().strftime("%Y-%m-%d")
 
 
 def load_config():
@@ -47,13 +53,16 @@ def read_csv(path: Path) -> str:
 def main():
     config = load_config()
     viz = config["visualizer"]
-    pdf_cfg = config["pdf"]
+    pdf_cfg = config.get("pdf", {})
     out_cfg = config["output"]
 
     devices_csv_path = PROJECT_ROOT / out_cfg["transformed_devices_csv"]
     users_csv_path = PROJECT_ROOT / out_cfg["transformed_users_csv"]
     pdf_output_dir = PROJECT_ROOT / out_cfg["pdf_output_dir"]
     pdf_output_dir.mkdir(parents=True, exist_ok=True)
+
+    tmp_dir = PROJECT_ROOT / "data" / "tmp_screenshots"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
 
     if not devices_csv_path.exists():
         print(f"[ERROR] Devices CSV not found: {devices_csv_path}")
@@ -72,12 +81,16 @@ def main():
     with sync_playwright() as p:
         # Raspberry Pi / ARM: prefer system chromium if available
         chromium_path = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
+        launch_opts = {"headless": True, "args": ["--no-sandbox", "--disable-setuid-sandbox"]}
         if chromium_path:
-            browser = p.chromium.launch(executable_path=chromium_path, headless=True)
-        else:
-            browser = p.chromium.launch(headless=True)
+            launch_opts["executable_path"] = chromium_path
+        browser = p.chromium.launch(**launch_opts)
 
-        context = browser.new_context()
+        # Use a generous desktop viewport so charts render wide and crisp
+        context = browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            device_scale_factor=2,
+        )
         page = context.new_page()
 
         print(f"[BROWSER] Navigating to {url}")
@@ -121,7 +134,7 @@ def main():
         )
 
         # Wait for Chart.js to render
-        wait_ms = pdf_cfg.get("wait_ms_after_load", 1200)
+        wait_ms = pdf_cfg.get("wait_ms_after_load", 3000)
         print(f"[BROWSER] Waiting {wait_ms}ms for charts to render...")
         time.sleep(wait_ms / 1000)
 
@@ -133,14 +146,15 @@ def main():
 
         print(f"[BROWSER] Discovered {len(schools)} school(s): {', '.join(schools[:5])}{'...' if len(schools) > 5 else ''}")
 
-        # Generate one PDF per school
-        filter_wait = pdf_cfg.get("wait_ms_after_filter", 800)
+        # Generate one PDF per school via screenshot
+        filter_wait = pdf_cfg.get("wait_ms_after_filter", 1500)
         for school in schools:
             safe_name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in school).strip()
-            filename = f"{safe_name}_chromebook_report.pdf"
-            pdf_path = pdf_output_dir / filename
+            filename = f"{safe_name}_chromebook_report_{REPORT_DATE}"
+            png_path = tmp_dir / f"{filename}.png"
+            pdf_path = pdf_output_dir / f"{filename}.pdf"
 
-            print(f"[PDF] Generating: {filename}")
+            print(f"[PDF] Generating: {filename}.pdf")
 
             # Filter to this school via the search box
             page.evaluate(
@@ -154,16 +168,69 @@ def main():
             )
             time.sleep(filter_wait / 1000)
 
-            # Use native print-to-PDF; @media print styles hide controls and paginate figures
-            page.pdf(
-                path=str(pdf_path),
-                format=pdf_cfg.get("format", "A4"),
-                print_background=pdf_cfg.get("print_background", True),
-                prefer_css_page_size=pdf_cfg.get("prefer_css_page_size", True),
-            )
+            # Switch to light theme, hide UI chrome, and repaint charts
+            page.evaluate("""() => {
+                // Light theme so text renders dark-on-white
+                document.documentElement.classList.add('theme-light');
+                try { localStorage.setItem('returnspace-theme', 'light'); } catch (e) {}
+                if (typeof applyChartDefaults === 'function') applyChartDefaults();
+                if (typeof updateCharts === 'function' && devicesData.length && studentsData.length) {
+                    updateCharts();
+                }
+
+                // Hide elements that are not useful in a PDF report
+                const hideSelectors = [
+                    '.uploads',
+                    '.howto',
+                    '.controls',
+                    '.settings',
+                    '#deviceTable',
+                    '.site-controls',
+                    'footer',
+                    '.btn-group',
+                    '#exportPdfBtn',
+                    '#exportDashboardBtn'
+                ];
+                hideSelectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(el => el.style.display = 'none');
+                });
+
+                // Hide the entire <figure> block that contains the device detail table (Tab. 02)
+                const deviceTable = document.getElementById('deviceTable');
+                if (deviceTable) {
+                    let el = deviceTable.parentElement;
+                    while (el && el.tagName !== 'FIGURE') { el = deviceTable.parentElement; }
+                    if (el) el.style.display = 'none';
+                }
+            }""")
+            # Allow charts to repaint with light-theme palette
+            time.sleep(1.0)
+
+            # Capture full-page screenshot
+            page.screenshot(path=str(png_path), full_page=True, type="png")
+
+            # Convert PNG -> PDF (page size equals image dimensions)
+            img = Image.open(png_path)
+            if img.mode in ("RGBA", "P"):
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                background.paste(img, mask=img.split()[-1])
+                img = background
+            else:
+                img = img.convert("RGB")
+
+            img.save(str(pdf_path), "PDF", resolution=100.0)
             print(f"[PDF] Saved -> {pdf_path}")
 
+            # Remove temp PNG to save space
+            png_path.unlink()
+
         browser.close()
+
+    # Clean up temp dir if empty
+    if tmp_dir.exists() and not any(tmp_dir.iterdir()):
+        tmp_dir.rmdir()
 
     print(f"[DONE] All PDFs written to {pdf_output_dir}")
     return 0
